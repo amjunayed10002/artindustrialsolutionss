@@ -676,8 +676,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
 
     const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-    if (error || !data.user) {
-      showToast('Sign in failed. Check your email and password, then try again.');
+    if (error) {
+      const message = error.message.toLowerCase();
+      if (message.includes('invalid login credentials')) {
+        showToast('Supabase did not accept this email/password. Check the exact Auth user email or reset that user’s password in Supabase.');
+      } else if (message.includes('email not confirmed')) {
+        showToast('Confirm this email in Supabase Authentication before signing in.');
+      } else {
+        showToast(`Sign in failed: ${error.message}`);
+      }
+      return false;
+    }
+    if (!data.user) {
+      showToast('Sign in failed. No user session was returned.');
       return false;
     }
 
