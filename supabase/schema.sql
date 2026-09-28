@@ -116,6 +116,107 @@ revoke all on public.profiles from anon, authenticated;
 grant select on public.profiles to authenticated;
 grant update (full_name, company_name, phone) on public.profiles to authenticated;
 
+create table if not exists public.site_config (
+  config_key text primary key,
+  config_value jsonb not null,
+  updated_at timestamptz not null default now(),
+  updated_by uuid references auth.users (id)
+);
+
+alter table public.site_config enable row level security;
+
+drop policy if exists "Anyone can read public site configuration" on public.site_config;
+create policy "Anyone can read public site configuration"
+on public.site_config for select to anon, authenticated
+using (true);
+
+create or replace function public.save_site_config(p_key text, p_value jsonb)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  actor_role text;
+begin
+  select admin_role into actor_role
+  from public.profiles
+  where id = auth.uid() and role = 'admin' and is_active = true;
+
+  if actor_role is null then
+    raise exception 'Active administrator access is required';
+  end if;
+
+  if p_key not in (
+    'website_settings', 'categories', 'products', 'services', 'industries',
+    'vendor_documents', 'social_media', 'homepage_sections', 'promotional_offer'
+  ) then
+    raise exception 'Unsupported site configuration key';
+  end if;
+
+  if p_key in ('products', 'categories') and actor_role not in ('super_admin', 'product_manager') then
+    raise exception 'Product manager access is required';
+  end if;
+
+  if p_key not in ('products', 'categories') and actor_role not in ('super_admin', 'content_manager') then
+    raise exception 'Content manager access is required';
+  end if;
+
+  insert into public.site_config (config_key, config_value, updated_at, updated_by)
+  values (p_key, p_value, now(), auth.uid())
+  on conflict (config_key) do update
+    set config_value = excluded.config_value,
+        updated_at = excluded.updated_at,
+        updated_by = excluded.updated_by;
+end;
+$$;
+
+revoke all on public.site_config from anon, authenticated;
+grant select on public.site_config to anon, authenticated;
+revoke all on function public.save_site_config(text, jsonb) from public, anon;
+grant execute on function public.save_site_config(text, jsonb) to authenticated;
+
+create or replace function public.manage_admin_role(p_email text, p_role text)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  actor_is_super_admin boolean;
+begin
+  select exists (
+    select 1 from public.profiles
+    where id = auth.uid()
+      and role = 'admin'
+      and admin_role = 'super_admin'
+      and is_active = true
+  ) into actor_is_super_admin;
+
+  if not actor_is_super_admin then
+    raise exception 'Super administrator access is required';
+  end if;
+
+  if p_role not in ('none', 'product_manager', 'rfq_manager', 'seller_manager', 'content_manager') then
+    raise exception 'Unsupported administrator role';
+  end if;
+
+  update public.profiles
+  set role = case when p_role = 'none' then 'customer' else 'admin' end,
+      admin_role = case when p_role = 'none' then null else p_role end
+  where lower(email) = lower(trim(p_email))
+    and role in ('customer', 'admin')
+    and coalesce(admin_role, '') <> 'super_admin';
+
+  if not found then
+    raise exception 'No eligible registered buyer account found for that email';
+  end if;
+end;
+$$;
+
+revoke all on function public.manage_admin_role(text, text) from public, anon;
+grant execute on function public.manage_admin_role(text, text) to authenticated;
+
 update public.profiles
 set role = 'admin', admin_role = 'super_admin', is_active = true
 where lower(email) = lower('admin@artindustrialsolution.com')

@@ -17,6 +17,7 @@ import {
   WebsiteSettings,
   User,
   SellerProfile,
+  AdminRoleType,
   PermissionKey,
   PromotionalOfferBanner
 } from '../types';
@@ -66,6 +67,10 @@ interface AppContextType {
   signIn: (email: string, password: string) => Promise<boolean>;
   signOut: () => Promise<void>;
   hasPermission: (permission: PermissionKey) => boolean;
+  siteConfigReady: boolean;
+  adminUsers: User[];
+  loadAdminUsers: () => Promise<void>;
+  manageAdminRole: (email: string, role: AdminRoleType | 'none') => Promise<boolean>;
 
   products: Product[];
   categories: ProductCategory[];
@@ -280,6 +285,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [currentUser, setCurrentUser] = useState<User>(GUEST_USER);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [authLoading, setAuthLoading] = useState(true);
+  const [siteConfigReady, setSiteConfigReady] = useState(false);
+  const [adminUsers, setAdminUsers] = useState<User[]>([]);
 
   const [websiteSettings, setWebsiteSettingsState] = useState<WebsiteSettings>(() => getStorage('settings', INITIAL_SETTINGS));
   const [categories, setCategories] = useState<ProductCategory[]>(() => getStorage('categories', INITIAL_CATEGORIES));
@@ -355,6 +362,43 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       active = false;
       subscription.unsubscribe();
     };
+  }, []);
+
+  useEffect(() => {
+    if (!supabase) return;
+    const client = supabase;
+
+    let active = true;
+    const loadSiteConfig = async () => {
+      const { data, error } = await client
+        .from('site_config')
+        .select('config_key, config_value');
+
+      if (error) {
+        console.error('Unable to load shared site configuration', error);
+        if (active) setToastMessage('Shared settings could not load. Run the latest Supabase schema before editing site content.');
+        return;
+      }
+
+      if (!active) return;
+      for (const row of (data || []) as { config_key: string; config_value: unknown }[]) {
+        switch (row.config_key) {
+          case 'website_settings': setWebsiteSettingsState(row.config_value as WebsiteSettings); break;
+          case 'categories': setCategories(row.config_value as ProductCategory[]); break;
+          case 'products': setProducts(row.config_value as Product[]); break;
+          case 'services': setServices(row.config_value as EngineeringService[]); break;
+          case 'industries': setIndustries(row.config_value as IndustryServed[]); break;
+          case 'vendor_documents': setVendorDocuments(row.config_value as VendorDocument[]); break;
+          case 'social_media': setSocialMedia(row.config_value as SocialMediaItem[]); break;
+          case 'homepage_sections': setHomepageSections(row.config_value as HomepageSectionConfig[]); break;
+          case 'promotional_offer': setPromotionalOfferState(row.config_value as PromotionalOfferBanner); break;
+        }
+      }
+      setSiteConfigReady(true);
+    };
+
+    void loadSiteConfig();
+    return () => { active = false; };
   }, []);
 
   // Sync non-sensitive application preferences and working data to local storage.
@@ -874,6 +918,78 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
+  const saveSharedConfig = async (key: string, value: unknown, permission: PermissionKey) => {
+    if (!siteConfigReady || !isAuthenticated || !supabase || !hasPermission(permission)) return;
+
+    const { error } = await supabase.rpc('save_site_config', {
+      p_key: key,
+      p_value: value
+    });
+    if (error) {
+      console.error(`Unable to save shared ${key}`, error);
+      showToast(`Could not save ${key.replaceAll('_', ' ')} globally. Check the Supabase schema and permissions.`);
+    }
+  };
+
+  useEffect(() => { void saveSharedConfig('website_settings', websiteSettings, 'settings.manage'); }, [websiteSettings, siteConfigReady, isAuthenticated, currentUser.id]);
+  useEffect(() => { void saveSharedConfig('categories', categories, 'categories.manage'); }, [categories, siteConfigReady, isAuthenticated, currentUser.id]);
+  useEffect(() => { void saveSharedConfig('products', products, 'products.edit'); }, [products, siteConfigReady, isAuthenticated, currentUser.id]);
+  useEffect(() => { void saveSharedConfig('services', services, 'services.manage'); }, [services, siteConfigReady, isAuthenticated, currentUser.id]);
+  useEffect(() => { void saveSharedConfig('industries', industries, 'industries.manage'); }, [industries, siteConfigReady, isAuthenticated, currentUser.id]);
+  useEffect(() => { void saveSharedConfig('vendor_documents', vendorDocuments, 'documents.manage'); }, [vendorDocuments, siteConfigReady, isAuthenticated, currentUser.id]);
+  useEffect(() => { void saveSharedConfig('social_media', socialMedia, 'settings.manage'); }, [socialMedia, siteConfigReady, isAuthenticated, currentUser.id]);
+  useEffect(() => { void saveSharedConfig('homepage_sections', homepageSections, 'homepage.manage'); }, [homepageSections, siteConfigReady, isAuthenticated, currentUser.id]);
+  useEffect(() => { void saveSharedConfig('promotional_offer', promotionalOffer, 'homepage.manage'); }, [promotionalOffer, siteConfigReady, isAuthenticated, currentUser.id]);
+
+  const loadAdminUsers = async (): Promise<void> => {
+    if (!supabase || !hasPermission('admins.manage')) return;
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('role', 'admin')
+      .order('created_at', { ascending: true });
+
+    if (error) {
+      console.error('Unable to load administrators', error);
+      showToast('Could not load administrator accounts.');
+      return;
+    }
+
+    setAdminUsers(((data || []) as unknown as ProfileRecord[]).map(profile => ({
+      id: profile.id,
+      name: profile.full_name,
+      email: profile.email || '',
+      phone: profile.phone,
+      companyName: profile.company_name,
+      role: profile.role,
+      adminRole: profile.admin_role || undefined,
+      sellerStatus: profile.seller_status || undefined,
+      createdAt: profile.created_at,
+      isActive: profile.is_active
+    })));
+  };
+
+  const manageAdminRole = async (email: string, role: AdminRoleType | 'none'): Promise<boolean> => {
+    if (!supabase || !hasPermission('admins.manage')) {
+      showToast('Only a super administrator can manage sub-admin access.');
+      return false;
+    }
+
+    const { error } = await supabase.rpc('manage_admin_role', {
+      p_email: email,
+      p_role: role
+    });
+    if (error) {
+      console.error('Unable to update administrator role', error);
+      showToast(error.message);
+      return false;
+    }
+
+    await loadAdminUsers();
+    showToast(role === 'none' ? 'Administrator access removed.' : 'Sub-admin access updated.');
+    return true;
+  };
+
   // Admin CRUD for Products
   const addProduct = (p: Omit<Product, 'id' | 'createdAt' | 'views' | 'salesCount'>) => {
     if (!hasPermission('products.add')) {
@@ -1161,6 +1277,10 @@ Contact: info@artindustrialsolutions.com | Tel: +880 2 988 7412
         signIn,
         signOut,
         hasPermission,
+        siteConfigReady,
+        adminUsers,
+        loadAdminUsers,
+        manageAdminRole,
 
         products,
         categories,

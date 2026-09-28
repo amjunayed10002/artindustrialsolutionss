@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useApp } from '../../context/AppContext';
 import { Product, ProductCategory, VendorDocument, SocialMediaItem } from '../../types';
 import {
@@ -19,13 +19,18 @@ import {
   Sliders,
   Share2,
   Eye,
-  ExternalLink
+  ExternalLink,
+  UserPlus
 } from 'lucide-react';
 
 export const AdminDashboard: React.FC = () => {
   const {
     currentUser,
     hasPermission,
+    adminUsers,
+    loadAdminUsers,
+    manageAdminRole,
+    siteConfigReady,
     products,
     categoriesWithCounts,
     rfqs,
@@ -55,8 +60,29 @@ export const AdminDashboard: React.FC = () => {
   } = useApp();
 
   const [activeTab, setActiveTab] = useState<
-    'products' | 'categories' | 'rfqs' | 'sellers' | 'documents' | 'homepage' | 'settings' | 'django_export'
+    'products' | 'categories' | 'rfqs' | 'sellers' | 'documents' | 'homepage' | 'settings' | 'admins' | 'django_export'
   >('products');
+  const [adminEmail, setAdminEmail] = useState('');
+  const [adminRole, setAdminRole] = useState<'product_manager' | 'rfq_manager' | 'seller_manager' | 'content_manager'>('product_manager');
+  const [adminActionBusy, setAdminActionBusy] = useState(false);
+
+  useEffect(() => {
+    if (activeTab === 'admins') void loadAdminUsers();
+  }, [activeTab]);
+
+  const handleAdminRoleSubmit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setAdminActionBusy(true);
+    const updated = await manageAdminRole(adminEmail.trim(), adminRole);
+    setAdminActionBusy(false);
+    if (updated) setAdminEmail('');
+  };
+
+  const handleRevokeAdminRole = async (email: string) => {
+    setAdminActionBusy(true);
+    await manageAdminRole(email, 'none');
+    setAdminActionBusy(false);
+  };
 
   // Product Add / Edit Modal State
   const [productModalOpen, setProductModalOpen] = useState(false);
@@ -359,6 +385,13 @@ export const AdminDashboard: React.FC = () => {
               <Settings className="w-3.5 h-3.5" />
               <span>Site & Social Media</span>
             </button>
+            {hasPermission('admins.manage') && <button
+              onClick={() => setActiveTab('admins')}
+              className={`px-3 py-1.5 font-bold rounded-xs transition-colors flex items-center gap-1.5 ${activeTab === 'admins' ? 'bg-[#12304A] text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}
+            >
+              <UserPlus className="w-3.5 h-3.5" />
+              <span>Team Access</span>
+            </button>}
             <button
               onClick={() => setActiveTab('django_export')}
               className={`px-3 py-1.5 font-bold rounded-xs transition-colors flex items-center gap-1.5 ${activeTab === 'django_export' ? 'bg-[#F28C28] text-white' : 'bg-amber-100 text-amber-900 hover:bg-amber-200'}`}
@@ -741,6 +774,80 @@ export const AdminDashboard: React.FC = () => {
               ))}
             </div>
           </div>
+        )}
+
+        {activeTab === 'admins' && hasPermission('admins.manage') && (
+          <section className="space-y-5">
+            <div>
+              <h2 className="text-base font-bold text-[#12304A]">Sub-admin access</h2>
+              <p className="mt-1 text-xs text-slate-600">Assign a permission group to an existing registered buyer account. Sub-admins cannot manage administrator access.</p>
+            </div>
+
+            <form onSubmit={handleAdminRoleSubmit} className="grid grid-cols-1 md:grid-cols-[1fr_220px_auto] gap-3 items-end bg-white border border-slate-200 p-4">
+              <div>
+                <label htmlFor="subadmin-email" className="block text-xs font-semibold text-slate-700 mb-1.5">Registered account email</label>
+                <input
+                  id="subadmin-email"
+                  type="email"
+                  required
+                  value={adminEmail}
+                  onChange={event => setAdminEmail(event.target.value)}
+                  placeholder="person@company.com"
+                  className="w-full px-3 py-2 border border-slate-300 rounded-sm text-sm outline-none focus:border-[#1E5A85]"
+                />
+              </div>
+              <div>
+                <label htmlFor="subadmin-role" className="block text-xs font-semibold text-slate-700 mb-1.5">Permission group</label>
+                <select
+                  id="subadmin-role"
+                  value={adminRole}
+                  onChange={event => setAdminRole(event.target.value as typeof adminRole)}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-sm bg-white text-sm outline-none focus:border-[#1E5A85]"
+                >
+                  <option value="product_manager">Product manager</option>
+                  <option value="rfq_manager">RFQ manager</option>
+                  <option value="seller_manager">Seller manager</option>
+                  <option value="content_manager">Content manager</option>
+                </select>
+              </div>
+              <button
+                type="submit"
+                disabled={adminActionBusy}
+                className="px-4 py-2 bg-[#12304A] hover:bg-[#1E5A85] disabled:bg-slate-400 text-white text-sm font-semibold rounded-sm"
+              >
+                {adminActionBusy ? 'Saving…' : 'Grant access'}
+              </button>
+            </form>
+
+            <div className="bg-white border border-slate-200">
+              <div className="grid grid-cols-[1fr_180px_120px] gap-3 px-4 py-2.5 border-b border-slate-200 bg-slate-50 text-[10px] font-bold uppercase text-slate-500">
+                <span>Administrator</span><span>Role</span><span className="text-right">Action</span>
+              </div>
+              {adminUsers.length === 0 ? (
+                <p className="px-4 py-8 text-center text-sm text-slate-500">No administrator accounts were found.</p>
+              ) : adminUsers.map(admin => (
+                <div key={admin.id} className="grid grid-cols-[1fr_180px_120px] gap-3 items-center px-4 py-3 border-b last:border-b-0 border-slate-100 text-sm">
+                  <div className="min-w-0">
+                    <p className="font-semibold text-slate-800 truncate">{admin.name || admin.email}</p>
+                    <p className="text-xs text-slate-500 truncate">{admin.email}</p>
+                  </div>
+                  <span className="text-xs font-medium text-slate-700 capitalize">{admin.adminRole?.replaceAll('_', ' ') || 'Admin'}</span>
+                  {admin.adminRole === 'super_admin' ? (
+                    <span className="text-right text-[11px] text-slate-400">Protected</span>
+                  ) : (
+                    <button
+                      type="button"
+                      disabled={adminActionBusy}
+                      onClick={() => void handleRevokeAdminRole(admin.email)}
+                      className="justify-self-end text-xs font-semibold text-rose-700 hover:underline disabled:text-slate-400"
+                    >Revoke access</button>
+                  )}
+                </div>
+              ))}
+            </div>
+
+            {!siteConfigReady && <p className="text-xs text-amber-800">Shared site content is unavailable. Apply the latest Supabase schema, then reload this page.</p>}
+          </section>
         )}
 
         {/* TAB 6: HOMEPAGE SECTIONS CONFIGURATION */}

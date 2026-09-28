@@ -7,7 +7,7 @@ Industrial supply, B2B procurement and multi-seller RFQ website built with React
 Requires Node.js 20 or newer.
 
 1. Create a Supabase project.
-2. Run [`supabase/schema.sql`](supabase/schema.sql) in the Supabase SQL Editor.
+2. Run the latest [`supabase/schema.sql`](supabase/schema.sql) in the Supabase SQL Editor. Rerun it after pulling schema updates; it installs the shared content table and role-management functions.
 3. Copy `.env.example` to `.env.local` and set `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` from the Supabase project API settings.
 4. Run `npm install` and `npm run dev`.
 
@@ -28,13 +28,17 @@ The query should return one row. If it returns no rows, confirm the email under 
 
 Configure the Supabase Auth site URL and redirect URLs for both local development and the deployed domain. Enable email confirmation before launch and configure the confirmation email template.
 
+Super admins can open **Admin Dashboard → Team Access** to assign or revoke product, RFQ, seller, and content manager roles for existing buyer accounts. The account must already exist in Supabase Auth.
+
 ## Deploy
 
 For Vercel, import the repository and set the build command to `npm run build` and output directory to `dist`. Add `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` under the project's environment variables, then redeploy.
 
 ## Current Database Boundary
 
-Supabase currently stores authentication profiles and seller approval status. Product catalog, cart, RFQ, offer, order and site-content data are still held in browser storage and are not shared between users or devices. Those workflows require a further database migration before using this as a live marketplace; do not use the current client-side permissions as the security boundary for business records.
+Supabase stores authentication profiles and seller approval status. The product catalog, categories, services, industries, vendor documents, social links, homepage configuration, promotional offer, and site settings are stored in shared Supabase site configuration and are visible across browsers after the latest schema is installed. When the shared configuration is empty, the first administrator session seeds it from that browser's current site content.
+
+Cart, RFQ, offer, order and contact-message records are still held in browser storage and are not shared between users or devices. Those transactional workflows require a further database migration before using the marketplace for live transactions; do not use client-side state as the security boundary for business records.
 
 ## Project Structure
 
