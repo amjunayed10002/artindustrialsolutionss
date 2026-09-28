@@ -69,7 +69,8 @@ select
   case when users.raw_user_meta_data->>'account_type' = 'seller' then 'seller' else 'customer' end,
   case when users.raw_user_meta_data->>'account_type' = 'seller' then 'pending' else null end
 from auth.users as users
-on conflict (id) do nothing;
+on conflict (id) do update
+set email = excluded.email;
 
 create or replace function public.set_seller_status(target_user_id uuid, new_status text)
 returns void
@@ -114,4 +115,9 @@ with check (id = auth.uid());
 revoke all on public.profiles from anon, authenticated;
 grant select on public.profiles to authenticated;
 grant update (full_name, company_name, phone) on public.profiles to authenticated;
+
+update public.profiles
+set role = 'admin', admin_role = 'super_admin', is_active = true
+where lower(email) = lower('admin@artindustrialsolution.com')
+returning id, email, role, admin_role;
 

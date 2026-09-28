@@ -19,7 +19,7 @@ Buyer and seller accounts use Supabase email/password authentication. New seller
 
 ```sql
 update public.profiles
-set role = 'admin', admin_role = 'super_admin'
+set role = 'admin', admin_role = 'super_admin', is_active = true
 where lower(email) = lower('your-registered-email@example.com')
 returning id, email, role, admin_role;
 ```
