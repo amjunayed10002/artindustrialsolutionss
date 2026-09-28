@@ -20,8 +20,25 @@ import {
   Share2,
   Eye,
   ExternalLink,
-  UserPlus
+  UserPlus,
+  ArrowUp,
+  ArrowDown
 } from 'lucide-react';
+
+const ADDABLE_HOMEPAGE_SECTIONS = [
+  { type: 'all_products', title: 'All Industrial Products', subtitle: 'Browse the product catalog.' },
+  { type: 'categories', title: 'Industrial Product Categories', subtitle: 'Explore the categories.' },
+  { type: 'best_sellers', title: 'Best Selling Products', subtitle: 'Popular products from the catalog.' },
+  { type: 'featured', title: 'Featured Industrial Products', subtitle: 'Selected featured products.' },
+  { type: 'best_rated', title: 'Best Rated Products', subtitle: 'Highest rated products.' },
+  { type: 'special_offers', title: 'Special Offers', subtitle: 'Products with special pricing.' },
+  { type: 'category_showcase', title: 'Category Based Products', subtitle: 'Browse products by category.' },
+  { type: 'services', title: 'Engineering Services', subtitle: 'Explore our services.' },
+  { type: 'industries', title: 'Industries We Serve', subtitle: 'Explore industries.' },
+  { type: 'vendor_enlistment', title: 'Vendor Enlistment', subtitle: 'View vendor information.' },
+  { type: 'rfq_cta', title: 'Request a Quotation', subtitle: 'Start an RFQ.' },
+  { type: 'custom_banner', title: 'New homepage banner', subtitle: 'Add a message for visitors.', imageUrl: '', ctaText: 'Explore products', targetView: 'shop' as const }
+];
 
 export const AdminDashboard: React.FC = () => {
   const {
@@ -55,8 +72,12 @@ export const AdminDashboard: React.FC = () => {
     addSocialMedia,
     deleteSocialMedia,
     updateHomepageSection,
+    addHomepageSection,
+    deleteHomepageSection,
+    reorderHomepageSection,
     promotionalOffer,
-    updatePromotionalOffer
+    updatePromotionalOffer,
+    uploadSiteImage
   } = useApp();
 
   const [activeTab, setActiveTab] = useState<
@@ -65,6 +86,9 @@ export const AdminDashboard: React.FC = () => {
   const [adminEmail, setAdminEmail] = useState('');
   const [adminRole, setAdminRole] = useState<'product_manager' | 'rfq_manager' | 'seller_manager' | 'content_manager'>('product_manager');
   const [adminActionBusy, setAdminActionBusy] = useState(false);
+  const [logoUploading, setLogoUploading] = useState(false);
+  const [productImageUploading, setProductImageUploading] = useState(false);
+  const [newHomepageSectionType, setNewHomepageSectionType] = useState('all_products');
 
   useEffect(() => {
     if (activeTab === 'admins') void loadAdminUsers();
@@ -83,6 +107,53 @@ export const AdminDashboard: React.FC = () => {
     await manageAdminRole(email, 'none');
     setAdminActionBusy(false);
   };
+
+  const handleLogoUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    setLogoUploading(true);
+    try {
+      const imageUrl = await uploadSiteImage(file, 'branding');
+      if (imageUrl) updateWebsiteSettings({ logoUrl: imageUrl });
+    } finally {
+      setLogoUploading(false);
+      event.target.value = '';
+    }
+  };
+
+  const handleProductImageUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    setProductImageUploading(true);
+    try {
+      const imageUrl = await uploadSiteImage(file, 'products');
+      if (imageUrl) setProdForm(previous => ({ ...previous, imageUrl }));
+    } finally {
+      setProductImageUploading(false);
+      event.target.value = '';
+    }
+  };
+
+  const handleHomepageImageUpload = async (sectionId: string, event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    try {
+      const imageUrl = await uploadSiteImage(file, 'branding');
+      if (imageUrl) updateHomepageSection(sectionId, { imageUrl });
+    } finally {
+      event.target.value = '';
+    }
+  };
+
+  const handleAddHomepageSection = () => {
+    const template = ADDABLE_HOMEPAGE_SECTIONS.find(section => section.type === newHomepageSectionType);
+    if (!template) return;
+    addHomepageSection({ ...template, order: homepageSections.length + 1, isEnabled: true, itemCount: 4 });
+  };
+
+  const availableHomepageSections = ADDABLE_HOMEPAGE_SECTIONS.filter(
+    section => !homepageSections.some(existing => existing.type === section.type)
+  );
 
   // Product Add / Edit Modal State
   const [productModalOpen, setProductModalOpen] = useState(false);
@@ -1002,33 +1073,83 @@ export const AdminDashboard: React.FC = () => {
             <div className="bg-white border border-[#E2E8F0] rounded-xs p-6 shadow-xs space-y-4">
               <div>
                 <h2 className="text-base font-bold text-[#12304A]">Homepage Layout & Section Ordering</h2>
-                <p className="text-xs text-slate-500">Toggle sections on or off and configure titles dynamically.</p>
+                <p className="text-xs text-slate-500">Edit section copy, change the order, hide blocks, or add a supported block. Changes appear on the shared homepage.</p>
               </div>
 
-            <div className="space-y-2">
-              {homepageSections.map((sec, idx) => (
-                <div key={sec.id} className="p-3 border border-slate-200 rounded-xs flex items-center justify-between text-xs">
-                  <div className="flex items-center gap-3">
-                    <span className="font-bold font-mono text-slate-400 w-6">#{idx + 1}</span>
-                    <div>
-                      <span className="font-bold text-slate-900 block">{sec.title}</span>
-                      <span className="text-[11px] text-slate-400">{sec.subtitle} (Type: {sec.type})</span>
+              <div className="flex flex-col sm:flex-row gap-2">
+                <select
+                  aria-label="Homepage section to add"
+                  value={newHomepageSectionType}
+                  onChange={event => setNewHomepageSectionType(event.target.value)}
+                  disabled={availableHomepageSections.length === 0}
+                  className="flex-1 p-2 border border-slate-300 rounded-xs bg-white text-xs"
+                >
+                  {availableHomepageSections.length === 0 ? <option value="">All supported sections are added</option> :
+                    availableHomepageSections.map(section => <option key={section.type} value={section.type}>{section.title}</option>)}
+                </select>
+                <button
+                  type="button"
+                  onClick={handleAddHomepageSection}
+                  disabled={!hasPermission('homepage.manage') || availableHomepageSections.length === 0}
+                  className="px-3 py-2 bg-[#12304A] hover:bg-[#1E5A85] text-white text-xs font-semibold rounded-xs disabled:bg-slate-300"
+                >Add homepage section</button>
+              </div>
+
+              <div className="space-y-2">
+                {[...homepageSections].sort((a, b) => a.order - b.order).map((sec, idx) => (
+                  <div key={sec.id} className="grid grid-cols-1 lg:grid-cols-[54px_minmax(0,1fr)_auto] gap-3 p-3 border border-slate-200 rounded-xs items-start">
+                    <div className="flex lg:flex-col items-center gap-1">
+                      <button type="button" disabled={idx === 0} onClick={() => reorderHomepageSection(sec.id, 'up')} aria-label={`Move ${sec.title} up`} className="p-1 text-slate-600 hover:text-[#12304A] disabled:text-slate-300"><ArrowUp className="w-4 h-4" /></button>
+                      <span className="text-[10px] font-mono text-slate-400">{idx + 1}</span>
+                      <button type="button" disabled={idx === homepageSections.length - 1} onClick={() => reorderHomepageSection(sec.id, 'down')} aria-label={`Move ${sec.title} down`} className="p-1 text-slate-600 hover:text-[#12304A] disabled:text-slate-300"><ArrowDown className="w-4 h-4" /></button>
+                    </div>
+                    <div className="space-y-2 min-w-0">
+                      <div>
+                        <label className="block text-[10px] font-bold uppercase text-slate-500 mb-1">Section title <span className="font-normal normal-case">({sec.type})</span></label>
+                        <input value={sec.title} onChange={event => updateHomepageSection(sec.id, { title: event.target.value })} disabled={!hasPermission('homepage.manage')} className="w-full p-2 border border-slate-300 rounded-xs text-xs font-semibold" />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-bold uppercase text-slate-500 mb-1">Description</label>
+                        <textarea rows={2} value={sec.subtitle} onChange={event => updateHomepageSection(sec.id, { subtitle: event.target.value })} disabled={!hasPermission('homepage.manage')} className="w-full p-2 border border-slate-300 rounded-xs text-xs" />
+                      </div>
+                      {sec.type === 'custom_banner' && <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        <div>
+                          <label className="block text-[10px] font-bold uppercase text-slate-500 mb-1">Image URL</label>
+                          <input type="url" value={sec.imageUrl || ''} onChange={event => updateHomepageSection(sec.id, { imageUrl: event.target.value })} disabled={!hasPermission('homepage.manage')} className="w-full p-2 border border-slate-300 rounded-xs text-xs" placeholder="https://..." />
+                        </div>
+                        <div>
+                          <label className="block text-[10px] font-bold uppercase text-slate-500 mb-1">Upload image</label>
+                          <input type="file" accept="image/png,image/jpeg,image/webp,image/gif" disabled={!hasPermission('homepage.manage')} onChange={event => void handleHomepageImageUpload(sec.id, event)} className="w-full text-[11px]" />
+                        </div>
+                        <div>
+                          <label className="block text-[10px] font-bold uppercase text-slate-500 mb-1">Button label</label>
+                          <input value={sec.ctaText || ''} onChange={event => updateHomepageSection(sec.id, { ctaText: event.target.value })} disabled={!hasPermission('homepage.manage')} className="w-full p-2 border border-slate-300 rounded-xs text-xs" />
+                        </div>
+                        <div>
+                          <label className="block text-[10px] font-bold uppercase text-slate-500 mb-1">Button destination</label>
+                          <select value={sec.targetView || 'shop'} onChange={event => updateHomepageSection(sec.id, { targetView: event.target.value as NonNullable<typeof sec.targetView> })} disabled={!hasPermission('homepage.manage')} className="w-full p-2 border border-slate-300 rounded-xs bg-white text-xs">
+                            <option value="shop">Product catalog</option>
+                            <option value="rfq_builder">Request a quote</option>
+                            <option value="contact">Contact</option>
+                            <option value="services">Services</option>
+                            <option value="industries">Industries</option>
+                            <option value="vendor_enlistment">Vendor enlistment</option>
+                          </select>
+                        </div>
+                      </div>}
+                    </div>
+                    <div className="flex lg:flex-col items-center lg:items-end gap-2">
+                      <button
+                        type="button"
+                        onClick={() => updateHomepageSection(sec.id, { isEnabled: !sec.isEnabled })}
+                        disabled={!hasPermission('homepage.manage')}
+                        className={`px-3 py-1.5 font-bold text-[11px] rounded-xs ${sec.isEnabled ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-200 text-slate-600'}`}
+                      >{sec.isEnabled ? 'Visible' : 'Hidden'}</button>
+                      <button type="button" onClick={() => deleteHomepageSection(sec.id)} disabled={!hasPermission('homepage.manage')} title={`Remove ${sec.title}`} className="p-1.5 text-rose-700 hover:bg-rose-50 rounded-xs disabled:text-slate-300"><Trash2 className="w-4 h-4" /></button>
                     </div>
                   </div>
-
-                  <div className="flex items-center gap-3">
-                    {hasPermission('homepage.manage') && (
-                      <button
-                        onClick={() => updateHomepageSection(sec.id, { isEnabled: !sec.isEnabled })}
-                        className={`px-3 py-1 font-bold text-xs rounded-xs ${sec.isEnabled ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-200 text-slate-600'}`}
-                      >
-                        {sec.isEnabled ? 'Active' : 'Hidden'}
-                      </button>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
           </div>
         </div>
         )}
@@ -1036,6 +1157,55 @@ export const AdminDashboard: React.FC = () => {
         {/* TAB 7: SITE SETTINGS & DYNAMIC SOCIAL MEDIA */}
         {activeTab === 'settings' && (
           <div className="space-y-6">
+            <div className="bg-white border border-[#E2E8F0] rounded-xs p-6 shadow-xs space-y-4">
+              <div>
+                <h2 className="text-base font-bold text-[#12304A]">Site Logo</h2>
+                <p className="text-xs text-slate-500 mt-1">This image appears in the site header and footer for every visitor.</p>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-[minmax(0,1fr)_220px] gap-5 items-center">
+                <div className="space-y-3">
+                  <div>
+                    <label htmlFor="site-logo-url" className="block text-xs font-bold text-slate-700 mb-1">Logo image URL</label>
+                    <input
+                      id="site-logo-url"
+                      type="url"
+                      value={websiteSettings.logoUrl}
+                      disabled={!hasPermission('settings.manage')}
+                      onChange={event => updateWebsiteSettings({ logoUrl: event.target.value })}
+                      placeholder="https://..."
+                      className="w-full p-2 border border-slate-300 rounded-xs text-sm"
+                    />
+                  </div>
+                  <div>
+                    <label htmlFor="site-logo-file" className="block text-xs font-bold text-slate-700 mb-1">Upload from device</label>
+                    <input
+                      id="site-logo-file"
+                      type="file"
+                      accept="image/png,image/jpeg,image/webp,image/gif"
+                      disabled={!hasPermission('settings.manage') || logoUploading}
+                      onChange={handleLogoUpload}
+                      className="block w-full text-xs text-slate-600 file:mr-3 file:px-3 file:py-2 file:border-0 file:bg-slate-100 file:text-slate-700 file:font-semibold"
+                    />
+                    <p className="mt-1 text-[11px] text-slate-500">PNG, JPG, WebP, or GIF. Maximum 5 MB. {logoUploading ? 'Uploading…' : ''}</p>
+                  </div>
+                  {websiteSettings.logoUrl && hasPermission('settings.manage') && (
+                    <button
+                      type="button"
+                      onClick={() => updateWebsiteSettings({ logoUrl: '' })}
+                      className="text-xs font-semibold text-rose-700 hover:underline"
+                    >Remove logo from the site</button>
+                  )}
+                </div>
+                <div className="min-h-28 flex items-center justify-center border border-dashed border-slate-300 bg-slate-50 p-4">
+                  {websiteSettings.logoUrl ? (
+                    <img src={websiteSettings.logoUrl} alt="Current site logo preview" className="max-h-20 max-w-full object-contain" />
+                  ) : (
+                    <span className="text-xs text-slate-400">Text logo is currently in use</span>
+                  )}
+                </div>
+              </div>
+            </div>
+
             <div className="bg-white border border-[#E2E8F0] rounded-xs p-6 shadow-xs space-y-4">
               <h2 className="text-base font-bold text-[#12304A] border-b border-slate-100 pb-2">
                 Corporate Statutory & Identity Settings
@@ -1365,16 +1535,38 @@ class SellerOffer(models.Model):
                 </div>
               </div>
 
-              {/* Image input (paste URL or upload) */}
-              <div>
-                <label className="block font-bold text-slate-700 mb-1">Product Image (Paste URL or select)</label>
-                <input
-                  type="text"
-                  value={prodForm.imageUrl}
-                  onChange={e => setProdForm({ ...prodForm, imageUrl: e.target.value })}
-                  placeholder="https://... or /images/..."
-                  className="w-full p-2 border border-slate-300 rounded-xs"
-                />
+              <div className="space-y-3">
+                <div>
+                  <label htmlFor="product-image-url" className="block font-bold text-slate-700 mb-1">Product Image URL</label>
+                  <input
+                    id="product-image-url"
+                    type="url"
+                    value={prodForm.imageUrl}
+                    onChange={e => setProdForm({ ...prodForm, imageUrl: e.target.value })}
+                    placeholder="https://... or /images/..."
+                    className="w-full p-2 border border-slate-300 rounded-xs"
+                  />
+                </div>
+                <div>
+                  <label htmlFor="product-image-file" className="block font-bold text-slate-700 mb-1">Upload product image</label>
+                  <input
+                    id="product-image-file"
+                    type="file"
+                    accept="image/png,image/jpeg,image/webp,image/gif"
+                    disabled={productImageUploading || !hasPermission('products.add')}
+                    onChange={handleProductImageUpload}
+                    className="block w-full text-xs text-slate-600 file:mr-3 file:px-3 file:py-2 file:border-0 file:bg-slate-100 file:text-slate-700 file:font-semibold"
+                  />
+                  <p className="mt-1 text-[11px] text-slate-500">{productImageUploading ? 'Uploading…' : 'PNG, JPG, WebP, or GIF. Maximum 5 MB.'}</p>
+                </div>
+                {prodForm.imageUrl && (
+                  <div className="flex items-center gap-3">
+                    <img src={prodForm.imageUrl} alt="Product preview" className="w-20 h-20 object-contain border border-slate-200 bg-white" />
+                    <button type="button" onClick={() => setProdForm({ ...prodForm, imageUrl: '' })} className="text-xs font-semibold text-rose-700 hover:underline">
+                      Remove image
+                    </button>
+                  </div>
+                )}
               </div>
 
               <div>

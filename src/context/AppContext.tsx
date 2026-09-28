@@ -66,6 +66,7 @@ interface AppContextType {
   authConfigured: boolean;
   signIn: (email: string, password: string) => Promise<boolean>;
   signOut: () => Promise<void>;
+  uploadSiteImage: (file: File, folder: 'branding' | 'products') => Promise<string | null>;
   hasPermission: (permission: PermissionKey) => boolean;
   siteConfigReady: boolean;
   adminUsers: User[];
@@ -154,6 +155,9 @@ interface AppContextType {
   deleteSocialMedia: (id: string) => void;
 
   updateHomepageSection: (id: string, updates: Partial<HomepageSectionConfig>) => void;
+  addHomepageSection: (section: Omit<HomepageSectionConfig, 'id'>) => void;
+  deleteHomepageSection: (id: string) => void;
+  reorderHomepageSection: (id: string, direction: 'up' | 'down') => void;
   submitContactForm: (message: Omit<ContactMessage, 'id' | 'createdAt' | 'status'>) => void;
 
   // Promotional Offer Banner (Admin Controlled)
@@ -390,7 +394,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           case 'industries': setIndustries(row.config_value as IndustryServed[]); break;
           case 'vendor_documents': setVendorDocuments(row.config_value as VendorDocument[]); break;
           case 'social_media': setSocialMedia(row.config_value as SocialMediaItem[]); break;
-          case 'homepage_sections': setHomepageSections(row.config_value as HomepageSectionConfig[]); break;
+          case 'homepage_sections': setHomepageSections((row.config_value as HomepageSectionConfig[]).filter(section => section.type !== 'hero' && section.type !== 'quick_actions')); break;
           case 'promotional_offer': setPromotionalOfferState(row.config_value as PromotionalOfferBanner); break;
         }
       }
@@ -767,6 +771,34 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setIsAuthenticated(false);
     setCurrentView('home');
     showToast('You have signed out.');
+  };
+
+  const uploadSiteImage = async (file: File, folder: 'branding' | 'products'): Promise<string | null> => {
+    const permission = folder === 'branding' ? 'settings.manage' : 'products.add';
+    if (!supabase || !isAuthenticated || !hasPermission(permission)) {
+      showToast('Your account does not have permission to upload this image.');
+      return null;
+    }
+    if (!['image/jpeg', 'image/png', 'image/webp', 'image/gif'].includes(file.type) || file.size > 5 * 1024 * 1024) {
+      showToast('Choose a JPG, PNG, WebP, or GIF image up to 5 MB.');
+      return null;
+    }
+
+    const safeFileName = file.name.toLowerCase().replace(/[^a-z0-9.-]+/g, '-');
+    const filePath = `${folder}/${currentUser.id}/${crypto.randomUUID()}-${safeFileName}`;
+    const { error } = await supabase.storage.from('site-assets').upload(filePath, file, {
+      cacheControl: '3600',
+      contentType: file.type,
+      upsert: false
+    });
+    if (error) {
+      console.error('Unable to upload site image', error);
+      showToast('Image upload failed. Apply the latest Supabase schema and try again.');
+      return null;
+    }
+
+    const { data } = supabase.storage.from('site-assets').getPublicUrl(filePath);
+    return data.publicUrl;
   };
 
   const registerUser = async (data: {
@@ -1235,6 +1267,48 @@ Contact: info@artindustrialsolutions.com | Tel: +880 2 988 7412
     showToast('Homepage section updated.');
   };
 
+  const addHomepageSection = (section: Omit<HomepageSectionConfig, 'id'>) => {
+    if (!hasPermission('homepage.manage')) {
+      showToast('Error: Unauthorized to add homepage sections.');
+      return;
+    }
+    if (homepageSections.some(existing => existing.type === section.type)) {
+      showToast('This homepage section already exists.');
+      return;
+    }
+
+    setHomepageSections(prev => [...prev, {
+      ...section,
+      id: `sec-${crypto.randomUUID()}`,
+      order: Math.max(0, ...prev.map(existing => existing.order)) + 1
+    }]);
+    showToast('Homepage section added.');
+  };
+
+  const deleteHomepageSection = (id: string) => {
+    if (!hasPermission('homepage.manage')) {
+      showToast('Error: Unauthorized to remove homepage sections.');
+      return;
+    }
+    setHomepageSections(prev => prev.filter(section => section.id !== id));
+    showToast('Homepage section removed.');
+  };
+
+  const reorderHomepageSection = (id: string, direction: 'up' | 'down') => {
+    if (!hasPermission('homepage.manage')) {
+      showToast('Error: Unauthorized to reorder homepage sections.');
+      return;
+    }
+    setHomepageSections(prev => {
+      const ordered = prev.map(section => ({ ...section })).sort((a, b) => a.order - b.order);
+      const currentIndex = ordered.findIndex(section => section.id === id);
+      const targetIndex = currentIndex + (direction === 'up' ? -1 : 1);
+      if (currentIndex < 0 || targetIndex < 0 || targetIndex >= ordered.length) return prev;
+      [ordered[currentIndex].order, ordered[targetIndex].order] = [ordered[targetIndex].order, ordered[currentIndex].order];
+      return ordered.sort((a, b) => a.order - b.order);
+    });
+  };
+
   const submitContactForm = (message: Omit<ContactMessage, 'id' | 'createdAt' | 'status'>) => {
     const newMsg: ContactMessage = {
       ...message,
@@ -1276,6 +1350,7 @@ Contact: info@artindustrialsolutions.com | Tel: +880 2 988 7412
         authConfigured: supabaseConfigured,
         signIn,
         signOut,
+        uploadSiteImage,
         hasPermission,
         siteConfigReady,
         adminUsers,
@@ -1353,6 +1428,9 @@ Contact: info@artindustrialsolutions.com | Tel: +880 2 988 7412
         deleteSocialMedia,
 
         updateHomepageSection,
+        addHomepageSection,
+        deleteHomepageSection,
+        reorderHomepageSection,
         submitContactForm,
 
         toastMessage,

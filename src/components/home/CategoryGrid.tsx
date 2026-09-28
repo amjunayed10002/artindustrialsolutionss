@@ -1,8 +1,9 @@
 import React from 'react';
 import { useApp } from '../../context/AppContext';
 import { ArrowRight, Layers } from 'lucide-react';
+import { HomepageSectionConfig } from '../../types';
 
-export const CategoryGrid: React.FC = () => {
+export const CategoryGrid: React.FC<{ section?: HomepageSectionConfig }> = ({ section }) => {
   const { categoriesWithCounts, setCurrentView } = useApp();
 
   return (
@@ -17,10 +18,10 @@ export const CategoryGrid: React.FC = () => {
               <span>Heavy Industry Sourcing</span>
             </div>
             <h2 className="text-2xl sm:text-3xl font-bold text-[#12304A]">
-              Industrial Product Categories
+              {section?.title || 'Industrial Product Categories'}
             </h2>
             <p className="text-xs sm:text-sm text-slate-500 mt-1 max-w-2xl">
-              Browse 13+ specialized industrial divisions with live database stock quantities and direct quotation access.
+              {section?.subtitle || 'Browse 13+ specialized industrial divisions with live database stock quantities and direct quotation access.'}
             </p>
           </div>
 

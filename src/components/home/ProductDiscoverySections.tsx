@@ -25,6 +25,8 @@ export const ProductDiscoverySections: React.FC = () => {
     featuredProducts,
     bestSellingProducts,
     bestRatedProducts,
+    specialOfferProducts,
+    homepageSections,
     promotionalOffer,
     currentUser,
     setCurrentView
@@ -39,6 +41,11 @@ export const ProductDiscoverySections: React.FC = () => {
 
   // Category-based Product section tab state
   const [selectedCategoryTab, setSelectedCategoryTab] = useState<string>('welding-consumables');
+  const sectionConfig = (type: string) => homepageSections.find(section => section.type === type);
+  const isSectionEnabled = (type: string) => sectionConfig(type)?.isEnabled ?? true;
+  const sectionTitle = (type: string, fallback: string) => sectionConfig(type)?.title || fallback;
+  const sectionSubtitle = (type: string, fallback: string) => sectionConfig(type)?.subtitle || fallback;
+  const sectionOrder = (type: string, fallback: number) => sectionConfig(type)?.order ?? fallback;
 
   // Filter products for "All Products" section
   const activeProducts = products.filter(p => p.isActive);
@@ -86,12 +93,12 @@ export const ProductDiscoverySections: React.FC = () => {
     : [];
 
   return (
-    <div className="space-y-0 text-[#1F2933]">
+    <div className="flex flex-col text-[#1F2933]">
       
       {/* ============================================================== */}
       {/* 1. ALL PRODUCTS SECTION (First in user's specified sequence)     */}
       {/* ============================================================== */}
-      <section className="bg-[#F5F7F9] py-10 sm:py-12 border-b border-[#E2E8F0]">
+      {isSectionEnabled('all_products') && <section style={{ order: sectionOrder('all_products', 0) }} className="bg-[#F5F7F9] py-10 sm:py-12 border-b border-[#E2E8F0]">
         <div className="max-w-7xl mx-auto px-4 sm:px-6">
           
           {/* ============================================================ */}
@@ -182,10 +189,10 @@ export const ProductDiscoverySections: React.FC = () => {
                 <span>Ex-Stock Central Warehouse Inventory</span>
               </div>
               <h2 className="text-2xl sm:text-3xl font-bold text-[#12304A]">
-                All Industrial Products
+                {sectionTitle('all_products', 'All Industrial Products')}
               </h2>
               <p className="text-xs sm:text-sm text-slate-500 mt-1 max-w-2xl">
-                Browse our verified catalog of engineering components, certified spares, and MRO consumables with immediate dispatch.
+                {sectionSubtitle('all_products', 'Browse our verified catalog of engineering components, certified spares, and MRO consumables with immediate dispatch.')}
               </p>
             </div>
 
@@ -293,12 +300,12 @@ export const ProductDiscoverySections: React.FC = () => {
           </div>
 
         </div>
-      </section>
+      </section>}
 
       {/* ============================================================== */}
       {/* 2. TOP SELL (Best Selling Products - Second in sequence)        */}
       {/* ============================================================== */}
-      <section className="bg-white py-12 border-b border-[#E2E8F0]">
+      {isSectionEnabled('best_sellers') && <section style={{ order: sectionOrder('best_sellers', 2) }} className="bg-white py-12 border-b border-[#E2E8F0]">
         <div className="max-w-7xl mx-auto px-4 sm:px-6">
           <div className="flex flex-col sm:flex-row sm:items-end justify-between pb-6 mb-6 border-b border-slate-100 gap-4">
             <div className="flex items-start gap-3">
@@ -307,13 +314,13 @@ export const ProductDiscoverySections: React.FC = () => {
               </div>
               <div>
                 <div className="flex items-center gap-2">
-                  <h2 className="text-2xl font-bold text-[#12304A]">Top Selling Industrial Products</h2>
+                  <h2 className="text-2xl font-bold text-[#12304A]">{sectionTitle('best_sellers', 'Top Selling Industrial Products')}</h2>
                   <span className="text-[10px] font-semibold uppercase bg-orange-100 text-orange-900 px-2 py-0.5 rounded-xs tracking-wider">
                     Volume Verified
                   </span>
                 </div>
                 <p className="text-xs text-slate-500 mt-0.5">
-                  Calculated automatically from real factory procurement and plant supply records.
+                  {sectionSubtitle('best_sellers', 'Calculated automatically from real factory procurement and plant supply records.')}
                 </p>
               </div>
             </div>
@@ -333,12 +340,12 @@ export const ProductDiscoverySections: React.FC = () => {
             ))}
           </div>
         </div>
-      </section>
+      </section>}
 
       {/* ============================================================== */}
       {/* 3. BEST PRODUCT (Featured / Premium Components - Third)         */}
       {/* ============================================================== */}
-      <section className="bg-[#F5F7F9] py-12 border-b border-[#E2E8F0]">
+      {isSectionEnabled('featured') && <section style={{ order: sectionOrder('featured', 3) }} className="bg-[#F5F7F9] py-12 border-b border-[#E2E8F0]">
         <div className="max-w-7xl mx-auto px-4 sm:px-6">
           <div className="flex flex-col sm:flex-row sm:items-end justify-between pb-6 mb-6 border-b border-[#E2E8F0] gap-4">
             <div className="flex items-start gap-3">
@@ -347,13 +354,13 @@ export const ProductDiscoverySections: React.FC = () => {
               </div>
               <div>
                 <div className="flex items-center gap-2">
-                  <h2 className="text-2xl font-bold text-[#12304A]">Best Industrial Products</h2>
+                  <h2 className="text-2xl font-bold text-[#12304A]">{sectionTitle('featured', 'Best Industrial Products')}</h2>
                   <span className="text-[10px] font-semibold uppercase bg-blue-100 text-[#12304A] px-2 py-0.5 rounded-xs tracking-wider">
                     Engineers' Choice
                   </span>
                 </div>
                 <p className="text-xs text-slate-500 mt-0.5">
-                  Handpicked industrial grade spares certified for extreme manufacturing environments.
+                  {sectionSubtitle('featured', 'Handpicked industrial grade spares certified for extreme manufacturing environments.')}
                 </p>
               </div>
             </div>
@@ -373,12 +380,24 @@ export const ProductDiscoverySections: React.FC = () => {
             ))}
           </div>
         </div>
-      </section>
+      </section>}
+
+      {isSectionEnabled('special_offers') && <section style={{ order: sectionOrder('special_offers', 4) }} className="bg-white py-12 border-b border-[#E2E8F0]">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6">
+          <div className="pb-5 mb-5 border-b border-slate-100">
+            <h2 className="text-2xl font-bold text-[#12304A]">{sectionTitle('special_offers', 'Special Offers')}</h2>
+            <p className="text-xs text-slate-500 mt-1">{sectionSubtitle('special_offers', 'Current products with active pricing offers.')}</p>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+            {specialOfferProducts.slice(0, 4).map(product => <ProductCard key={product.id} product={product} />)}
+          </div>
+        </div>
+      </section>}
 
       {/* ============================================================== */}
       {/* 4. BEST RATED (Highest Rated Components - Fourth)               */}
       {/* ============================================================== */}
-      <section className="bg-white py-12 border-b border-[#E2E8F0]">
+      {isSectionEnabled('best_rated') && <section style={{ order: sectionOrder('best_rated', 5) }} className="bg-white py-12 border-b border-[#E2E8F0]">
         <div className="max-w-7xl mx-auto px-4 sm:px-6">
           <div className="flex flex-col sm:flex-row sm:items-end justify-between pb-6 mb-6 border-b border-slate-100 gap-4">
             <div className="flex items-start gap-3">
@@ -387,13 +406,13 @@ export const ProductDiscoverySections: React.FC = () => {
               </div>
               <div>
                 <div className="flex items-center gap-2">
-                  <h2 className="text-2xl font-bold text-[#12304A]">Best Rated by Plant Engineers</h2>
+                  <h2 className="text-2xl font-bold text-[#12304A]">{sectionTitle('best_rated', 'Best Rated by Plant Engineers')}</h2>
                   <span className="text-[10px] font-semibold uppercase bg-amber-100 text-amber-900 px-2 py-0.5 rounded-xs tracking-wider">
                     ★ 4.8+ Stars
                   </span>
                 </div>
                 <p className="text-xs text-slate-500 mt-0.5">
-                  Highest rated products verified for reliability, wear resistance, and long MTBF in 24/7 continuous operations.
+                  {sectionSubtitle('best_rated', 'Highest rated products verified for reliability, wear resistance, and long MTBF in 24/7 continuous operations.')}
                 </p>
               </div>
             </div>
@@ -413,12 +432,12 @@ export const ProductDiscoverySections: React.FC = () => {
             ))}
           </div>
         </div>
-      </section>
+      </section>}
 
       {/* ============================================================== */}
       {/* 5. CATEGORY BASED PRODUCT (Fifth in sequence)                  */}
       {/* ============================================================== */}
-      <section className="bg-[#F5F7F9] py-12 border-b border-[#E2E8F0]">
+      {isSectionEnabled('category_showcase') && <section style={{ order: sectionOrder('category_showcase', 6) }} className="bg-[#F5F7F9] py-12 border-b border-[#E2E8F0]">
         <div className="max-w-7xl mx-auto px-4 sm:px-6">
           
           <div className="flex flex-col sm:flex-row sm:items-end justify-between pb-6 mb-6 border-b border-[#E2E8F0] gap-4">
@@ -428,13 +447,13 @@ export const ProductDiscoverySections: React.FC = () => {
               </div>
               <div>
                 <div className="flex items-center gap-2">
-                  <h2 className="text-2xl font-bold text-[#12304A]">Category Based Products</h2>
+                  <h2 className="text-2xl font-bold text-[#12304A]">{sectionTitle('category_showcase', 'Category Based Products')}</h2>
                   <span className="text-[10px] font-semibold uppercase bg-[#12304A] text-white px-2 py-0.5 rounded-xs tracking-wider">
                     Targeted Sourcing
                   </span>
                 </div>
                 <p className="text-xs text-slate-500 mt-0.5">
-                  Select an industrial discipline to inspect verified OEM components, specifications, and live inventory.
+                  {sectionSubtitle('category_showcase', 'Select an industrial discipline to inspect verified OEM components, specifications, and live inventory.')}
                 </p>
               </div>
             </div>
@@ -504,7 +523,7 @@ export const ProductDiscoverySections: React.FC = () => {
           </div>
 
         </div>
-      </section>
+      </section>}
 
     </div>
   );

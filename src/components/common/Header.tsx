@@ -87,12 +87,20 @@ export const Header: React.FC = () => {
               onClick={() => setCurrentView('home')}
               className="text-left group flex items-center gap-3 btn-3d"
             >
-              <div className="w-10 h-10 bg-[#12304A] text-white flex items-center justify-center rounded-sm font-bold text-lg tracking-wider border-2 border-[#F28C28] shadow-sm transform group-hover:scale-105 transition-transform duration-200">
-                ART
-              </div>
+              {websiteSettings.logoUrl ? (
+                <img
+                  src={websiteSettings.logoUrl}
+                  alt={`${websiteSettings.siteName} logo`}
+                  className="w-10 h-10 object-contain shrink-0"
+                />
+              ) : (
+                <div className="w-10 h-10 bg-[#12304A] text-white flex items-center justify-center rounded-sm font-bold text-lg tracking-wider border-2 border-[#F28C28] shadow-sm transform group-hover:scale-105 transition-transform duration-200">
+                  ART
+                </div>
+              )}
               <div className="leading-tight">
                 <span className="block text-xl font-bold tracking-tight text-[#12304A] group-hover:text-[#1E5A85] transition-colors">
-                  ART INDUSTRIAL
+                  {websiteSettings.siteName}
                 </span>
                 <span className="block text-[11px] font-semibold text-[#F28C28] tracking-widest uppercase">
                   Solutions & Supply

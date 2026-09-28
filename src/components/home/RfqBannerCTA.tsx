@@ -1,8 +1,9 @@
 import React from 'react';
 import { useApp } from '../../context/AppContext';
 import { FileText, ArrowRight, ShieldCheck, CheckCircle2, Building2 } from 'lucide-react';
+import { HomepageSectionConfig } from '../../types';
 
-export const RfqBannerCTA: React.FC = () => {
+export const RfqBannerCTA: React.FC<{ section?: HomepageSectionConfig }> = ({ section }) => {
   const { setCurrentView, cartCount, cartToRfq } = useApp();
 
   return (
@@ -18,12 +19,11 @@ export const RfqBannerCTA: React.FC = () => {
               </div>
 
               <h2 className="text-2xl sm:text-3xl lg:text-4xl font-bold tracking-tight text-white leading-tight">
-                Streamline Your Industrial Sourcing with Cart-to-RFQ
+                {section?.title || 'Streamline Your Industrial Sourcing with Cart-to-RFQ'}
               </h2>
 
               <p className="text-sm sm:text-base text-slate-300 leading-relaxed max-w-2xl">
-                Add required mechanical spares, bearings, and welding consumables to your cart, then generate a project RFQ with a single click. 
-                Approved sellers submit transparent quotations for you to compare side-by-side.
+                {section?.subtitle || 'Add required mechanical spares, bearings, and welding consumables to your cart, then generate a project RFQ with a single click. Approved sellers submit transparent quotations for you to compare side-by-side.'}
               </p>
 
               {/* Step indicator */}

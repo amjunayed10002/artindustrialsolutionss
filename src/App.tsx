@@ -76,21 +76,62 @@ const WorkspaceGate: React.FC<{ role: UserRole; children: React.ReactNode }> = (
 };
 
 const AppContent: React.FC = () => {
-  const { currentView, selectedRfqId, toastMessage } = useApp();
+  const { currentView, selectedRfqId, toastMessage, homepageSections, setCurrentView } = useApp();
+
+  const renderHomepage = () => {
+    const orderedSections = [...homepageSections].sort((a, b) => a.order - b.order);
+    const productSectionTypes = new Set(['all_products', 'featured', 'best_sellers', 'best_rated', 'special_offers', 'category_showcase']);
+    let productDiscoveryRendered = false;
+
+    return (
+      <main className="flex flex-col">
+        {orderedSections.map(section => {
+          if (!section.isEnabled || section.type === 'hero' || section.type === 'quick_actions') return null;
+
+          if (productSectionTypes.has(section.type)) {
+            if (productDiscoveryRendered) return null;
+            productDiscoveryRendered = true;
+            const productOrder = Math.min(...orderedSections
+              .filter(item => item.isEnabled && productSectionTypes.has(item.type))
+              .map(item => item.order));
+            return <div key="product-discovery" style={{ order: productOrder }}><ProductDiscoverySections /></div>;
+          }
+
+          const sectionContent = (() => {
+            switch (section.type) {
+              case 'categories': return <CategoryGrid section={section} />;
+              case 'services': return <ServicesSection section={section} />;
+              case 'industries': return <IndustriesSection section={section} />;
+              case 'vendor_enlistment': return <VendorEnlistmentCTA section={section} />;
+              case 'rfq_cta': return <RfqBannerCTA section={section} />;
+              case 'custom_banner': return (
+                <section className="relative isolate overflow-hidden bg-[#12304A] text-white">
+                  {section.imageUrl && <img src={section.imageUrl} alt="" className="absolute inset-0 -z-10 h-full w-full object-cover opacity-30" />}
+                  <div className="max-w-7xl mx-auto px-4 sm:px-6 py-12 sm:py-16">
+                    <div className="max-w-3xl space-y-4">
+                      <h2 className="text-2xl sm:text-3xl font-bold">{section.title}</h2>
+                      <p className="text-sm sm:text-base text-slate-200">{section.subtitle}</p>
+                      <button onClick={() => setCurrentView(section.targetView || 'shop')} className="px-5 py-3 bg-[#F28C28] hover:bg-[#d9771b] text-white text-sm font-semibold rounded-xs">
+                        {section.ctaText || 'Learn more'}
+                      </button>
+                    </div>
+                  </div>
+                </section>
+              );
+              default: return null;
+            }
+          })();
+
+          return sectionContent ? <div key={section.id} style={{ order: section.order }}>{sectionContent}</div> : null;
+        })}
+      </main>
+    );
+  };
 
   const renderCurrentView = () => {
     switch (currentView) {
       case 'home':
-        return (
-          <main>
-            <ProductDiscoverySections />
-            <CategoryGrid />
-            <ServicesSection />
-            <IndustriesSection />
-            <VendorEnlistmentCTA />
-            <RfqBannerCTA />
-          </main>
-        );
+        return renderHomepage();
       case 'shop':
         return <ShopPage />;
       case 'product_detail':
@@ -118,12 +159,7 @@ const AppContent: React.FC = () => {
       case 'contact':
         return <ContactUsPage />;
       default:
-        return (
-          <main>
-            <ProductDiscoverySections />
-            <CategoryGrid />
-          </main>
-        );
+        return renderHomepage();
     }
   };
 

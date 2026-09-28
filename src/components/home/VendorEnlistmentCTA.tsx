@@ -1,8 +1,9 @@
 import React from 'react';
 import { useApp } from '../../context/AppContext';
 import { FileText, Download, ShieldCheck, ArrowRight, CheckCircle } from 'lucide-react';
+import { HomepageSectionConfig } from '../../types';
 
-export const VendorEnlistmentCTA: React.FC = () => {
+export const VendorEnlistmentCTA: React.FC<{ section?: HomepageSectionConfig }> = ({ section }) => {
   const { vendorDocuments, downloadDocument, setCurrentView } = useApp();
 
   return (
@@ -17,10 +18,10 @@ export const VendorEnlistmentCTA: React.FC = () => {
               <span>Corporate Pre-Qualification & Tenders</span>
             </div>
             <h2 className="text-2xl sm:text-3xl font-bold text-[#12304A]">
-              Vendor Enlistment & Statutory Credentials
+              {section?.title || 'Vendor Enlistment & Statutory Credentials'}
             </h2>
             <p className="text-xs sm:text-sm text-slate-500 mt-1 max-w-2xl">
-              Procurement departments can immediately download audited statutory tax certificates, Trade License, and capability statements.
+              {section?.subtitle || 'Procurement departments can immediately download audited statutory tax certificates, Trade License, and capability statements.'}
             </p>
           </div>
 

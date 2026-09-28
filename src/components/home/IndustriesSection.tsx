@@ -1,8 +1,9 @@
 import React from 'react';
 import { useApp } from '../../context/AppContext';
 import { Factory, ArrowRight } from 'lucide-react';
+import { HomepageSectionConfig } from '../../types';
 
-export const IndustriesSection: React.FC = () => {
+export const IndustriesSection: React.FC<{ section?: HomepageSectionConfig }> = ({ section }) => {
   const { industries, setCurrentView } = useApp();
 
   return (
@@ -17,10 +18,10 @@ export const IndustriesSection: React.FC = () => {
               <span>Cross-Sector Reliability</span>
             </div>
             <h2 className="text-2xl sm:text-3xl font-bold text-[#12304A]">
-              Industries We Serve
+              {section?.title || 'Industries We Serve'}
             </h2>
             <p className="text-xs sm:text-sm text-slate-500 mt-1 max-w-2xl">
-              Proven procurement solutions, fast breakdown dispatch, and certified spares across 12 heavy industrial sectors in Bangladesh.
+              {section?.subtitle || 'Proven procurement solutions, fast breakdown dispatch, and certified spares across 12 heavy industrial sectors in Bangladesh.'}
             </p>
           </div>
 

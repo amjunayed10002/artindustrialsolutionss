@@ -265,6 +265,9 @@ export interface HomepageSectionConfig {
   order: number;
   isEnabled: boolean;
   itemCount: number;
+  imageUrl?: string;
+  ctaText?: string;
+  targetView?: 'shop' | 'rfq_builder' | 'contact' | 'services' | 'industries' | 'vendor_enlistment';
 }
 
 export interface ContactMessage {

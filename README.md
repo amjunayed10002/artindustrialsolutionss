@@ -36,7 +36,7 @@ For Vercel, import the repository and set the build command to `npm run build` a
 
 ## Current Database Boundary
 
-Supabase stores authentication profiles and seller approval status. The product catalog, categories, services, industries, vendor documents, social links, homepage configuration, promotional offer, and site settings are stored in shared Supabase site configuration and are visible across browsers after the latest schema is installed. When the shared configuration is empty, the first administrator session seeds it from that browser's current site content.
+Supabase stores authentication profiles and seller approval status. The product catalog, categories, services, industries, vendor documents, social links, homepage configuration, promotional offer, and site settings are stored in shared Supabase site configuration and are visible across browsers after the latest schema is installed. Logo, product, and custom-banner uploads use the public `site-assets` bucket with role-scoped write policies. When the shared configuration is empty, the first administrator session seeds it from that browser's current site content.
 
 Cart, RFQ, offer, order and contact-message records are still held in browser storage and are not shared between users or devices. Those transactional workflows require a further database migration before using the marketplace for live transactions; do not use client-side state as the security boundary for business records.
 

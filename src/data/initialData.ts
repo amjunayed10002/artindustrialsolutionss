@@ -1163,19 +1163,17 @@ export const INITIAL_SELLER_OFFERS: SellerOffer[] = [
 ];
 
 export const INITIAL_HOMEPAGE_SECTIONS: HomepageSectionConfig[] = [
-  { id: 'sec-hero', type: 'hero', title: 'Industrial Hero Banner', subtitle: 'Your Trusted Industrial Supply Partner', order: 1, isEnabled: true, itemCount: 1 },
-  { id: 'sec-quick-actions', type: 'quick_actions', title: 'Quick Action Procurement Shortcuts', subtitle: 'RFQ, Call Now, Catalog, WhatsApp', order: 2, isEnabled: true, itemCount: 4 },
-  { id: 'sec-categories', type: 'categories', title: 'Major Industrial Categories', subtitle: 'Browse 13+ specialized heavy industrial categories with live inventory counts', order: 3, isEnabled: true, itemCount: 13 },
-  { id: 'sec-featured', type: 'featured', title: 'Featured Industrial Spares', subtitle: 'Hand-picked certified components for critical mechanical & electrical applications', order: 4, isEnabled: true, itemCount: 6 },
-  { id: 'sec-bestsellers', type: 'best_sellers', title: 'Best Selling Products', subtitle: 'Calculated dynamically based on verified B2B procurement order volumes', order: 5, isEnabled: true, itemCount: 6 },
-  { id: 'sec-bestrated', type: 'best_rated', title: 'Highest Rated by Engineers', subtitle: 'Top-reviewed industrial spares with 4.8+ star field reliability ratings', order: 6, isEnabled: true, itemCount: 6 },
-  { id: 'sec-offers', type: 'special_offers', title: 'Special Offers & Contract Discounts', subtitle: 'Factory direct volume pricing and time-limited procurement rebates', order: 7, isEnabled: true, itemCount: 6 },
-  { id: 'sec-cat-welding', type: 'category_showcase', title: 'Welding Consumables & Arc Equipment', subtitle: 'ESAB, Lincoln Electric, and industrial gas consumables', categorySlug: 'welding-consumables', order: 8, isEnabled: true, itemCount: 4 },
-  { id: 'sec-cat-bearings', type: 'category_showcase', title: 'Precision Industrial Bearings', subtitle: 'SKF, FAG, Timken roller & deep groove ball bearings', categorySlug: 'bearings', order: 9, isEnabled: true, itemCount: 4 },
-  { id: 'sec-services', type: 'services', title: 'Engineering & Maintenance Services', subtitle: 'Certified plant shutdown, laser alignment, and structural fabrication', order: 10, isEnabled: true, itemCount: 6 },
-  { id: 'sec-industries', type: 'industries', title: 'Industries We Serve', subtitle: 'Delivering end-to-end supply chain reliability across 12 heavy industrial sectors', order: 11, isEnabled: true, itemCount: 12 },
-  { id: 'sec-vendor', type: 'vendor_enlistment', title: 'Vendor Enlistment & Credentials', subtitle: 'Download certified legal documents, corporate profile, and ISO audit statements', order: 12, isEnabled: true, itemCount: 6 },
-  { id: 'sec-rfq-cta', type: 'rfq_cta', title: 'Request For Quotation (RFQ) Gateway', subtitle: 'Submit multi-item project BOMs and receive competitive offers from approved sellers', order: 13, isEnabled: true, itemCount: 1 }
+  { id: 'sec-all-products', type: 'all_products', title: 'All Industrial Products', subtitle: 'Browse our verified catalog of engineering components, certified spares, and MRO consumables with immediate dispatch.', order: 1, isEnabled: true, itemCount: 8 },
+  { id: 'sec-categories', type: 'categories', title: 'Major Industrial Categories', subtitle: 'Browse 13+ specialized heavy industrial categories with live inventory counts', order: 2, isEnabled: true, itemCount: 13 },
+  { id: 'sec-bestsellers', type: 'best_sellers', title: 'Best Selling Products', subtitle: 'Calculated automatically from factory procurement records', order: 3, isEnabled: true, itemCount: 4 },
+  { id: 'sec-featured', type: 'featured', title: 'Featured Industrial Spares', subtitle: 'Hand-picked certified components for critical mechanical & electrical applications', order: 4, isEnabled: true, itemCount: 4 },
+  { id: 'sec-bestrated', type: 'best_rated', title: 'Highest Rated by Engineers', subtitle: 'Top-reviewed industrial spares with strong field reliability ratings', order: 5, isEnabled: true, itemCount: 4 },
+  { id: 'sec-offers', type: 'special_offers', title: 'Special Offers & Contract Discounts', subtitle: 'Factory direct volume pricing and time-limited procurement rebates', order: 6, isEnabled: true, itemCount: 4 },
+  { id: 'sec-cat-welding', type: 'category_showcase', title: 'Category Based Products', subtitle: 'Select an industrial discipline to inspect verified components and live inventory', order: 7, isEnabled: true, itemCount: 4 },
+  { id: 'sec-services', type: 'services', title: 'Engineering & Maintenance Services', subtitle: 'Certified plant shutdown, laser alignment, and structural fabrication', order: 8, isEnabled: true, itemCount: 6 },
+  { id: 'sec-industries', type: 'industries', title: 'Industries We Serve', subtitle: 'Procurement solutions and service across industrial sectors', order: 9, isEnabled: true, itemCount: 12 },
+  { id: 'sec-vendor', type: 'vendor_enlistment', title: 'Vendor Enlistment & Credentials', subtitle: 'Download company and compliance documents', order: 10, isEnabled: true, itemCount: 6 },
+  { id: 'sec-rfq-cta', type: 'rfq_cta', title: 'Request For Quotation (RFQ) Gateway', subtitle: 'Submit project requirements and receive supplier quotations', order: 11, isEnabled: true, itemCount: 1 }
 ];
 
 export const INITIAL_PROMOTIONAL_OFFER: PromotionalOfferBanner = {

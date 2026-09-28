@@ -1,8 +1,9 @@
 import React from 'react';
 import { useApp } from '../../context/AppContext';
 import { Wrench, ArrowRight, CheckCircle2 } from 'lucide-react';
+import { HomepageSectionConfig } from '../../types';
 
-export const ServicesSection: React.FC = () => {
+export const ServicesSection: React.FC<{ section?: HomepageSectionConfig }> = ({ section }) => {
   const { services, setCurrentView } = useApp();
 
   return (
@@ -17,10 +18,10 @@ export const ServicesSection: React.FC = () => {
               <span>Plant Operations & Contracting</span>
             </div>
             <h2 className="text-2xl sm:text-3xl font-bold text-[#12304A]">
-              Industrial Engineering Services
+              {section?.title || 'Industrial Engineering Services'}
             </h2>
             <p className="text-xs sm:text-sm text-slate-500 mt-1 max-w-2xl">
-              Turnkey mechanical overhauls, planned factory turnaround, laser shaft alignment, and heavy structural steel fabrication.
+              {section?.subtitle || 'Turnkey mechanical overhauls, planned factory turnaround, laser shaft alignment, and heavy structural steel fabrication.'}
             </p>
           </div>
 

@@ -99,12 +99,20 @@ export const Footer: React.FC = () => {
           {/* Col 1: Corporate Info */}
           <div className="lg:col-span-2 space-y-4">
             <div className="flex items-center gap-3">
-              <div className="w-9 h-9 bg-white text-[#12304A] flex items-center justify-center rounded-sm font-bold text-base border border-[#F28C28]">
-                ART
-              </div>
+              {websiteSettings.logoUrl ? (
+                <img
+                  src={websiteSettings.logoUrl}
+                  alt={`${websiteSettings.siteName} logo`}
+                  className="w-9 h-9 object-contain shrink-0"
+                />
+              ) : (
+                <div className="w-9 h-9 bg-white text-[#12304A] flex items-center justify-center rounded-sm font-bold text-base border border-[#F28C28]">
+                  ART
+                </div>
+              )}
               <div>
                 <span className="block text-lg font-bold text-white tracking-tight">
-                  ART INDUSTRIAL SOLUTIONS
+                  {websiteSettings.siteName}
                 </span>
                 <span className="block text-[11px] text-[#F28C28] font-semibold tracking-wider uppercase">
                   {websiteSettings.tagline}

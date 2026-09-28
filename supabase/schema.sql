@@ -217,6 +217,63 @@ $$;
 revoke all on function public.manage_admin_role(text, text) from public, anon;
 grant execute on function public.manage_admin_role(text, text) to authenticated;
 
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+values (
+  'site-assets',
+  'site-assets',
+  true,
+  5242880,
+  array['image/jpeg', 'image/png', 'image/webp', 'image/gif']::text[]
+)
+on conflict (id) do update
+set public = excluded.public,
+    file_size_limit = excluded.file_size_limit,
+    allowed_mime_types = excluded.allowed_mime_types;
+
+create or replace function public.can_manage_site_asset(object_name text)
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select exists (
+    select 1 from public.profiles
+    where id = auth.uid()
+      and role = 'admin'
+      and is_active = true
+      and (
+        admin_role = 'super_admin'
+        or (split_part(object_name, '/', 1) = 'branding' and admin_role = 'content_manager')
+        or (split_part(object_name, '/', 1) = 'products' and admin_role = 'product_manager')
+      )
+  );
+$$;
+
+revoke all on function public.can_manage_site_asset(text) from public, anon;
+grant execute on function public.can_manage_site_asset(text) to authenticated;
+
+drop policy if exists "Public can view site assets" on storage.objects;
+create policy "Public can view site assets"
+on storage.objects for select to anon, authenticated
+using (bucket_id = 'site-assets');
+
+drop policy if exists "Authorized admins upload site assets" on storage.objects;
+create policy "Authorized admins upload site assets"
+on storage.objects for insert to authenticated
+with check (bucket_id = 'site-assets' and public.can_manage_site_asset(name));
+
+drop policy if exists "Authorized admins update site assets" on storage.objects;
+create policy "Authorized admins update site assets"
+on storage.objects for update to authenticated
+using (bucket_id = 'site-assets' and public.can_manage_site_asset(name))
+with check (bucket_id = 'site-assets' and public.can_manage_site_asset(name));
+
+drop policy if exists "Authorized admins delete site assets" on storage.objects;
+create policy "Authorized admins delete site assets"
+on storage.objects for delete to authenticated
+using (bucket_id = 'site-assets' and public.can_manage_site_asset(name));
+
 update public.profiles
 set role = 'admin', admin_role = 'super_admin', is_active = true
 where lower(email) = lower('admin@artindustrialsolution.com')
