@@ -59,6 +59,18 @@ create trigger on_auth_user_created
   after insert on auth.users
   for each row execute function public.handle_new_user();
 
+insert into public.profiles (id, email, full_name, company_name, phone, role, seller_status)
+select
+  users.id,
+  coalesce(users.email, ''),
+  coalesce(users.raw_user_meta_data->>'full_name', ''),
+  coalesce(users.raw_user_meta_data->>'company_name', ''),
+  coalesce(users.raw_user_meta_data->>'phone', ''),
+  case when users.raw_user_meta_data->>'account_type' = 'seller' then 'seller' else 'customer' end,
+  case when users.raw_user_meta_data->>'account_type' = 'seller' then 'pending' else null end
+from auth.users as users
+on conflict (id) do nothing;
+
 create or replace function public.set_seller_status(target_user_id uuid, new_status text)
 returns void
 language plpgsql
@@ -88,10 +100,12 @@ $$;
 
 grant execute on function public.set_seller_status(uuid, text) to authenticated;
 
+drop policy if exists "Users can view their own profile; admins can view all" on public.profiles;
 create policy "Users can view their own profile; admins can view all"
 on public.profiles for select to authenticated
 using (id = auth.uid() or public.is_admin());
 
+drop policy if exists "Users can update their own contact details" on public.profiles;
 create policy "Users can update their own contact details"
 on public.profiles for update to authenticated
 using (id = auth.uid())

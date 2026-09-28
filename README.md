@@ -20,8 +20,11 @@ Buyer and seller accounts use Supabase email/password authentication. New seller
 ```sql
 update public.profiles
 set role = 'admin', admin_role = 'super_admin'
-where email = 'admin@your-company.com';
+where lower(email) = lower('your-registered-email@example.com')
+returning id, email, role, admin_role;
 ```
+
+The query should return one row. If it returns no rows, confirm the email under Supabase Authentication → Users and rerun `supabase/schema.sql`; the schema backfills accounts that existed before the profile trigger was installed.
 
 Configure the Supabase Auth site URL and redirect URLs for both local development and the deployed domain. Enable email confirmation before launch and configure the confirmation email template.
 
