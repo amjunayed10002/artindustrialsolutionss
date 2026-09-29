@@ -15,7 +15,7 @@ The environment file is ignored by Git. Only the Supabase project URL and public
 
 ## Accounts
 
-Buyer and seller accounts use Supabase email/password authentication. New seller accounts remain pending until an authorized administrator approves them. Admin accounts must be provisioned by the project owner in the Supabase SQL Editor after the account has been created:
+Buyer and seller accounts use Supabase email/password authentication. Sellers are active on signup; buyers remain pending until a super admin or seller manager approves them in **Admin Dashboard → Sellers & Approvals**. To allow sellers to sign in immediately without a confirmation email, disable **Authentication → Sign In / Providers → Email → Confirm email** in Supabase. This also skips email confirmation for buyers; buyer workspace access is still blocked until admin approval. Admin accounts must be provisioned by the project owner in the Supabase SQL Editor after the account has been created:
 
 ```sql
 update public.profiles
@@ -26,7 +26,7 @@ returning id, email, role, admin_role;
 
 The query should return one row. If it returns no rows, confirm the email under Supabase Authentication → Users and rerun `supabase/schema.sql`; the schema backfills accounts that existed before the profile trigger was installed.
 
-Configure the Supabase Auth site URL and redirect URLs for both local development and the deployed domain. Enable email confirmation before launch and configure the confirmation email template.
+Configure the Supabase Auth site URL and redirect URLs for both local development and the deployed domain.
 
 Super admins can open **Admin Dashboard → Team Access** to assign or revoke product, RFQ, seller, and content manager roles for existing buyer accounts. The account must already exist in Supabase Auth.
 
@@ -36,9 +36,9 @@ For Vercel, import the repository and set the build command to `npm run build` a
 
 ## Current Database Boundary
 
-Supabase stores authentication profiles and seller approval status. The product catalog, categories, services, industries, vendor documents, social links, homepage configuration, promotional offer, and site settings are stored in shared Supabase site configuration and are visible across browsers after the latest schema is installed. Logo, product, and custom-banner uploads use the public `site-assets` bucket with role-scoped write policies. When the shared configuration is empty, the first administrator session seeds it from that browser's current site content.
+Supabase stores authentication profiles, buyer approval, seller status, products, RFQs, responses, orders, and shared site configuration. RFQ visibility and negotiation actions are restricted by participant and role policies in the database. Product catalog, categories, services, industries, vendor documents, social links, homepage configuration, promotional offer, and site settings are shared across browsers after the latest schema is installed. Logo, product, and custom-banner uploads use the public `site-assets` bucket with role-scoped write policies. When shared site configuration is empty, the first administrator session seeds it from that browser's current site content. Rerun the latest schema after pulling updates so buyer approvals, workflow RPCs, and Realtime publication are installed.
 
-Cart, RFQ, offer, order and contact-message records are still held in browser storage and are not shared between users or devices. Those transactional workflows require a further database migration before using the marketplace for live transactions; do not use client-side state as the security boundary for business records.
+Cart contents, unsent RFQ drafts, and contact messages remain in browser storage and are not shared between devices. Submitted RFQs, responses, and orders are stored in Supabase. Run the latest schema before production use so database policies and Realtime publication are installed.
 
 ## Project Structure
 
@@ -46,5 +46,5 @@ Cart, RFQ, offer, order and contact-message records are still held in browser st
 - `src/context/AppContext.tsx` – global app and authentication state
 - `src/data/initialData.ts` – starter catalog and company content
 - `src/lib/supabase.ts` – Supabase client configuration
-- `supabase/schema.sql` – profile, role and seller-review schema
+- `supabase/schema.sql` – profile, role, approval, storage and marketplace workflow schema
 - `public/images` – site images

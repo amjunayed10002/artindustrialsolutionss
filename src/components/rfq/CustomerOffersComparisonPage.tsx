@@ -21,12 +21,15 @@ import {
 export const CustomerOffersComparisonPage: React.FC = () => {
   const {
     selectedRfqId,
+    currentUser,
     rfqs,
     sellerOffers,
     procurementOrders,
     selectSellerOffer,
     rejectSellerOffer,
     submitCounterOffer,
+    acceptCounterOffer,
+    declineCounterOffer,
     setCurrentView
   } = useApp();
 
@@ -53,6 +56,7 @@ export const CustomerOffersComparisonPage: React.FC = () => {
   }
 
   const selectedOffer = offers.find(o => o.status === 'selected' || o.status === 'confirmed');
+  const sellerOwnsRfq = rfq.createdByRole === 'seller';
 
   const openCounterModal = (offer: SellerOffer) => {
     setCounterModalOffer(offer);
@@ -99,15 +103,15 @@ export const CustomerOffersComparisonPage: React.FC = () => {
                 </span>
               </div>
               <h1 className="text-2xl font-bold text-[#12304A]">
-                Supplier Quotation Comparison & Evaluation
+                {sellerOwnsRfq ? 'Buyer Response Review & Negotiation' : 'Supplier Quotation Comparison & Evaluation'}
               </h1>
               <p className="text-xs text-slate-500 mt-0.5">
-                Client: <strong>{rfq.companyName}</strong> · Delivery to: <strong>{rfq.deliveryLocation}</strong> · Required: <strong>{rfq.requiredDate}</strong>
+                {sellerOwnsRfq ? 'Seller requester' : 'Buyer'}: <strong>{rfq.companyName}</strong> · Delivery to: <strong>{rfq.deliveryLocation}</strong> · Required: <strong>{rfq.requiredDate}</strong>
               </p>
             </div>
 
             <div className="text-right">
-              <span className="text-xs text-slate-500 block">Total Offers Received</span>
+              <span className="text-xs text-slate-500 block">{sellerOwnsRfq ? 'Buyer responses' : 'Seller offers'} received</span>
               <span className="text-2xl font-bold text-[#12304A] tabular-nums">
                 {offers.length} {offers.length === 1 ? 'Supplier Bid' : 'Supplier Bids'}
               </span>
@@ -141,7 +145,7 @@ export const CustomerOffersComparisonPage: React.FC = () => {
                 <CheckCircle className="w-5 h-5 text-emerald-700 shrink-0 mt-0.5" />
                 <div>
                   <h3 className="font-bold text-sm text-emerald-950">
-                    Confirmed Supplier: {selectedOffer.sellerCompany} ({selectedOffer.sellerName})
+                    {sellerOwnsRfq ? 'Selected response' : 'Confirmed Supplier'}: {selectedOffer.sellerCompany} ({selectedOffer.sellerName})
                   </h3>
                   <p className="text-xs text-emerald-800 mt-0.5">
                     Quotation value: <strong>৳{selectedOffer.totalPrice.toLocaleString()}</strong>.
@@ -185,16 +189,8 @@ export const CustomerOffersComparisonPage: React.FC = () => {
             <Clock className="w-10 h-10 text-slate-300 mx-auto" />
             <h3 className="font-bold text-base text-slate-800">No Supplier Bids Received Yet</h3>
             <p className="text-xs text-slate-500 max-w-md mx-auto">
-              Your RFQ is published in the Authorized Seller Portal. Suppliers are currently calculating lead times and wholesale pricing.
+              {sellerOwnsRfq ? 'This RFQ is visible to approved buyers. No buyer responses have arrived yet.' : 'This RFQ is visible to approved sellers. No seller offers have arrived yet.'}
             </p>
-            <div className="pt-2">
-              <button
-                onClick={() => setCurrentView('seller_portal')}
-                className="px-4 py-2 bg-[#1E5A85] text-white text-xs font-semibold rounded-xs"
-              >
-                Switch to Seller Portal to Submit an Offer (Demo Mode)
-              </button>
-            </div>
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -219,7 +215,7 @@ export const CustomerOffersComparisonPage: React.FC = () => {
                       <div>
                         <div className="flex items-center gap-1.5 text-xs text-slate-500 mb-0.5">
                           <Building2 className="w-3.5 h-3.5 text-[#1E5A85]" />
-                          <span className="font-medium">Bidder #{idx + 1}</span>
+                          <span className="font-medium">{offer.bidderRole === 'customer' ? 'Buyer response' : `Seller offer #${idx + 1}`}</span>
                         </div>
                         <h3 className="font-bold text-sm text-[#12304A]">
                           {offer.sellerCompany}
@@ -314,22 +310,48 @@ export const CustomerOffersComparisonPage: React.FC = () => {
                       <div className="text-center py-2 text-xs font-bold text-emerald-700 bg-emerald-100/60 rounded-xs">
                         ✓ Selected Supplier Partner
                       </div>
+                    ) : rfq.createdByRole === 'seller' && offer.status === 'counter_offered' && offer.sellerId === currentUser.id ? (
+                      <div className="p-3 bg-amber-50 border border-amber-200 text-xs text-amber-950 rounded-xs space-y-2">
+                        <div><strong>Seller counteroffer:</strong> ৳{(offer.counterPrice || 0).toLocaleString()}
+                          {offer.counterNotes && <p className="mt-1">{offer.counterNotes}</p>}
+                        </div>
+                        <div className="flex gap-2">
+                          <button type="button" onClick={() => acceptCounterOffer(offer.id)} className="px-3 py-1.5 bg-emerald-700 text-white text-xs font-semibold">Accept</button>
+                          <button type="button" onClick={() => declineCounterOffer(offer.id)} className="px-3 py-1.5 border border-slate-300 text-slate-700 text-xs font-semibold">Decline</button>
+                        </div>
+                      </div>
+                    ) : rfq.createdByRole === 'seller' && offer.sellerId === currentUser.id && offer.status === 'pending' ? (
+                      <div className="text-center py-2 text-xs font-semibold text-slate-600 bg-slate-100 rounded-xs">Response sent · waiting for seller</div>
+                    ) : offer.status === 'counter_offered' ? (
+                      <div className="p-3 bg-amber-50 border border-amber-200 text-xs text-amber-950 rounded-xs">
+                        <strong>Counteroffer sent:</strong> ৳{(offer.counterPrice || 0).toLocaleString()}
+                        {offer.counterNotes && <p className="mt-1">{offer.counterNotes}</p>}
+                        <p className="mt-1 text-amber-800">Waiting for the seller to accept or decline.</p>
+                      </div>
+                    ) : isRejected || (rfq.createdByRole === 'seller' && offer.sellerId !== currentUser.id) ? (
+                      <div className="text-center py-2 text-xs font-bold text-slate-600 bg-slate-100 rounded-xs">Offer declined</div>
                     ) : (
                       <div className="flex flex-col gap-2">
+                        {rfq.createdByRole !== 'seller' && <button
+                          type="button"
+                          onClick={() => openCounterModal(offer)}
+                          className="w-full py-2 px-3 bg-amber-50 hover:bg-amber-100 border border-amber-200 text-amber-900 text-xs font-semibold rounded-xs"
+                        >Propose a counteroffer</button>}
+                        {rfq.createdByRole !== 'seller' && <>
                         <button
                           onClick={() => selectSellerOffer(rfq.id, offer.id)}
                           className="w-full py-2.5 px-3 bg-[#12304A] hover:bg-[#1E5A85] text-white text-xs font-bold rounded-xs transition-colors shadow-xs flex items-center justify-center gap-1.5"
                         >
                           <CheckCircle className="w-3.5 h-3.5 text-[#F28C28]" />
-                          <span>Confirm This Seller (৳{offer.totalPrice.toLocaleString()})</span>
+                          <span>{sellerOwnsRfq ? 'Confirm This Response' : 'Confirm This Seller'} (৳{offer.totalPrice.toLocaleString()})</span>
                         </button>
                         <button
                           onClick={() => rejectSellerOffer(rfq.id, offer.id)}
-                          disabled={isRejected}
                           className="w-full py-1.5 px-3 bg-white hover:bg-slate-100 border border-slate-300 text-slate-500 text-xs font-semibold rounded-xs transition-colors"
                         >
-                          {isRejected ? 'Declined' : 'Decline Offer'}
+                          Decline Offer
                         </button>
+                        </>}
                       </div>
                     )}
                   </div>
@@ -341,6 +363,27 @@ export const CustomerOffersComparisonPage: React.FC = () => {
         )}
 
       </div>
+
+      {counterModalOffer && <div className="fixed inset-0 z-[80] bg-black/60 flex items-center justify-center p-4">
+        <form onSubmit={handleSendCounter} className="w-full max-w-md bg-white p-5 shadow-2xl space-y-4">
+          <div>
+            <h2 className="text-lg font-bold text-[#12304A]">Counteroffer</h2>
+            <p className="text-xs text-slate-500">{counterModalOffer.sellerCompany} · Current offer ৳{counterModalOffer.totalPrice.toLocaleString()}</p>
+          </div>
+          <div>
+            <label htmlFor="counteroffer-price" className="block text-xs font-semibold text-slate-700 mb-1">Your proposed total (৳)</label>
+            <input id="counteroffer-price" type="number" min="1" step="0.01" required value={counterPriceInput} onChange={event => setCounterPriceInput(Number(event.target.value))} className="w-full p-2 border border-slate-300 rounded-xs text-sm" />
+          </div>
+          <div>
+            <label htmlFor="counteroffer-notes" className="block text-xs font-semibold text-slate-700 mb-1">Notes</label>
+            <textarea id="counteroffer-notes" rows={3} value={counterNotesInput} onChange={event => setCounterNotesInput(event.target.value)} className="w-full p-2 border border-slate-300 rounded-xs text-sm" />
+          </div>
+          <div className="flex justify-end gap-2">
+            <button type="button" onClick={() => setCounterModalOffer(null)} className="px-3 py-2 border border-slate-300 text-slate-700 text-xs font-semibold">Cancel</button>
+            <button type="submit" className="px-3 py-2 bg-[#12304A] text-white text-xs font-semibold">Send counteroffer</button>
+          </div>
+        </form>
+      </div>}
     </div>
   );
 };

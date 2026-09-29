@@ -109,8 +109,7 @@ export const RfqBuilderPage: React.FC = () => {
       overallNotes
     });
 
-    // Navigate to Customer Dashboard RFQ tab to see the newly submitted RFQ
-    setCurrentView('customer_dashboard');
+    if (rfqId) setCurrentView(currentUser.role === 'seller' ? 'seller_portal' : 'customer_dashboard');
   };
 
   return (
@@ -135,7 +134,7 @@ export const RfqBuilderPage: React.FC = () => {
 
             {/* Account Confirmation Status */}
             <div className="bg-[#F5F7F9] border border-slate-200 p-3 rounded-xs text-xs space-y-0.5">
-              <div className="text-slate-500 text-[10px] uppercase font-semibold">Procurement Client:</div>
+              <div className="text-slate-500 text-[10px] uppercase font-semibold">Requesting Account:</div>
               <div className="font-bold text-[#12304A]">{currentUser.name}</div>
               <div className="text-slate-500 text-[11px]">{currentUser.companyName || currentUser.email}</div>
             </div>

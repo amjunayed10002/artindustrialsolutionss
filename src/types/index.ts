@@ -35,6 +35,7 @@ export interface User {
   companyName?: string;
   role: UserRole;
   adminRole?: AdminRoleType;
+  buyerStatus?: 'pending' | 'approved' | 'rejected';
   sellerStatus?: 'pending' | 'approved' | 'rejected' | 'suspended';
   sellerProfileId?: string;
   customerProfileId?: string;
@@ -147,6 +148,7 @@ export interface RFQItem {
 export interface RFQ {
   id: string; // e.g. "RFQ-2026-000125"
   customerId: string;
+  createdByRole?: 'customer' | 'seller';
   customerName: string;
   customerEmail: string;
   customerPhone: string;
@@ -173,6 +175,7 @@ export interface SellerOffer {
   id: string;
   rfqId: string;
   sellerId: string;
+  bidderRole?: 'customer' | 'seller';
   sellerName: string;
   sellerCompany: string;
   sellerRating: number;

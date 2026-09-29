@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useApp } from '../../context/AppContext';
+import { RFQ } from '../../types';
 import {
   User as UserIcon,
   FileText,
@@ -19,16 +20,56 @@ export const CustomerDashboard: React.FC = () => {
     rfqs,
     sellerOffers,
     procurementOrders,
+    submitBuyerOffer,
     setCurrentView
   } = useApp();
 
   const [activeTab, setActiveTab] = useState<'rfqs' | 'orders' | 'profile'>('rfqs');
+  const [respondingToRfq, setRespondingToRfq] = useState<string | null>(null);
+  const [buyerOfferTotal, setBuyerOfferTotal] = useState('');
+  const [buyerOfferDelivery, setBuyerOfferDelivery] = useState('');
+  const [buyerOfferValidity, setBuyerOfferValidity] = useState('');
+  const [buyerOfferNotes, setBuyerOfferNotes] = useState('');
 
   // Customer RFQs
   const myRfqs = rfqs.filter(r => r.customerId === currentUser.id);
+  const supplierRfqs = rfqs.filter(r => r.createdByRole === 'seller' && (r.status === 'Submitted' || r.status === 'Offers Received'));
 
   // Customer Orders
   const myOrders = procurementOrders.filter(o => o.customerId === currentUser.id);
+
+  const handleSellerRfqResponse = (rfq: RFQ) => {
+    const totalPrice = Number(buyerOfferTotal);
+    const quantityTotal = rfq.items.reduce((total, item) => total + item.quantity, 0);
+    if (!Number.isFinite(totalPrice) || totalPrice <= 0 || quantityTotal <= 0) return;
+    const unitPrice = totalPrice / quantityTotal;
+
+    submitBuyerOffer({
+      rfqId: rfq.id,
+      sellerId: currentUser.id,
+      sellerName: currentUser.name,
+      sellerCompany: currentUser.companyName || currentUser.name,
+      sellerRating: 0,
+      items: rfq.items.map(item => ({
+        productId: item.productId,
+        productName: item.productName,
+        offeredQuantity: item.quantity,
+        unitPrice,
+        totalPrice: unitPrice * item.quantity
+      })),
+      totalPrice,
+      deliveryTime: buyerOfferDelivery.trim(),
+      availability: currentUser.companyName || 'Buyer response',
+      warranty: '',
+      offerValidity: buyerOfferValidity.trim(),
+      additionalNotes: buyerOfferNotes.trim()
+    });
+    setRespondingToRfq(null);
+    setBuyerOfferTotal('');
+    setBuyerOfferDelivery('');
+    setBuyerOfferValidity('');
+    setBuyerOfferNotes('');
+  };
 
   return (
     <div className="bg-[#F5F7F9] min-h-screen py-8">
@@ -88,6 +129,35 @@ export const CustomerDashboard: React.FC = () => {
         {/* TAB 1: MY RFQS */}
         {activeTab === 'rfqs' && (
           <div className="space-y-4">
+            {supplierRfqs.length > 0 && <section className="bg-white border border-[#E2E8F0] p-5 space-y-3">
+              <div>
+                <h2 className="text-base font-bold text-[#12304A]">Seller RFQs</h2>
+                <p className="text-xs text-slate-500">Requests published by sellers and visible to buyer accounts.</p>
+              </div>
+              {supplierRfqs.map(rfq => (
+                <div key={rfq.id} className="border-t border-slate-100 pt-3 space-y-3">
+                <article className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-semibold text-[#12304A]">{rfq.companyName || rfq.customerName}</p>
+                    <p className="text-xs text-slate-500">{rfq.id} · {rfq.items.length} items · {rfq.deliveryLocation}</p>
+                    <p className="text-xs text-slate-600 mt-1">{rfq.items.map(item => `${item.quantity} ${item.unit} ${item.productName}`).join(', ')}</p>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <span className="text-[10px] font-bold uppercase px-2 py-1 bg-amber-100 text-amber-900">{rfq.status}</span>
+                    <button onClick={() => setCurrentView('customer_dashboard', { rfqId: rfq.id })} className="px-3 py-1.5 bg-[#12304A] text-white text-xs font-semibold rounded-xs">View responses ({sellerOffers.filter(offer => offer.rfqId === rfq.id).length})</button>
+                    <button onClick={() => setRespondingToRfq(respondingToRfq === rfq.id ? null : rfq.id)} className="px-3 py-1.5 border border-[#1E5A85] text-[#1E5A85] text-xs font-semibold rounded-xs">Respond</button>
+                  </div>
+                </article>
+                {respondingToRfq === rfq.id && <form key={`${rfq.id}-response`} onSubmit={event => { event.preventDefault(); handleSellerRfqResponse(rfq); }} className="grid grid-cols-1 sm:grid-cols-2 gap-3 border-t border-slate-100 pt-3">
+                  <label className="text-xs font-semibold text-slate-700">Total quote (৳)<input type="number" required min="0.01" step="0.01" value={buyerOfferTotal} onChange={event => setBuyerOfferTotal(event.target.value)} className="mt-1 w-full p-2 border border-slate-300 rounded-xs" /></label>
+                  <label className="text-xs font-semibold text-slate-700">Delivery estimate<input required value={buyerOfferDelivery} onChange={event => setBuyerOfferDelivery(event.target.value)} placeholder="e.g. 5 business days" className="mt-1 w-full p-2 border border-slate-300 rounded-xs" /></label>
+                  <label className="text-xs font-semibold text-slate-700">Offer validity<input required value={buyerOfferValidity} onChange={event => setBuyerOfferValidity(event.target.value)} placeholder="e.g. 14 days" className="mt-1 w-full p-2 border border-slate-300 rounded-xs" /></label>
+                  <label className="text-xs font-semibold text-slate-700">Notes<input value={buyerOfferNotes} onChange={event => setBuyerOfferNotes(event.target.value)} className="mt-1 w-full p-2 border border-slate-300 rounded-xs" /></label>
+                  <div className="sm:col-span-2 flex justify-end"><button type="submit" className="px-4 py-2 bg-[#12304A] text-white text-xs font-semibold rounded-xs">Submit response</button></div>
+                </form>}
+                </div>
+              ))}
+            </section>}
             <div className="flex items-center justify-between">
               <h2 className="text-base font-bold text-[#12304A]">
                 Submitted Quotation Requests (RFQs)

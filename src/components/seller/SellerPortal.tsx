@@ -25,11 +25,16 @@ export const SellerPortal: React.FC = () => {
     rfqs,
     sellerOffers,
     submitSellerOffer,
+    selectSellerOffer,
+    rejectSellerOffer,
+    submitCounterOffer,
+    acceptCounterOffer,
+    declineCounterOffer,
     confirmSellerOrder,
     setCurrentView
   } = useApp();
 
-  const [activeTab, setActiveTab] = useState<'available_rfqs' | 'my_offers' | 'orders' | 'profile'>('available_rfqs');
+  const [activeTab, setActiveTab] = useState<'available_rfqs' | 'my_rfqs' | 'my_offers' | 'orders' | 'profile'>('available_rfqs');
 
   // Identify seller profile
   const currentSeller: SellerProfile = sellers.find(s => s.userId === currentUser.id) || {
@@ -51,7 +56,12 @@ export const SellerPortal: React.FC = () => {
   };
 
   // RFQs open for bidding
-  const openRfqs = rfqs.filter(r => r.status === 'Submitted' || r.status === 'Offers Received');
+  const openRfqs = rfqs.filter(r =>
+    (r.status === 'Submitted' || r.status === 'Offers Received') &&
+    (r.createdByRole || 'customer') === 'customer' &&
+    !(r.createdByRole === 'seller' && r.customerId === currentUser.id)
+  );
+  const myRfqs = rfqs.filter(r => r.createdByRole === 'seller' && r.customerId === currentUser.id);
 
   // Offers submitted by this seller
   const myOffers = sellerOffers.filter(o => o.sellerId === currentSeller.id);
@@ -76,6 +86,9 @@ export const SellerPortal: React.FC = () => {
   const [dispatchTrackingNo, setDispatchTrackingNo] = useState<string>('');
   const [dispatchEstDate, setDispatchEstDate] = useState<string>('');
   const [dispatchRemarks, setDispatchRemarks] = useState<string>('');
+  const [counteringOfferId, setCounteringOfferId] = useState<string | null>(null);
+  const [counterTotal, setCounterTotal] = useState('');
+  const [counterNotes, setCounterNotes] = useState('');
 
   const handleOpenBidding = (rfq: RFQ) => {
     setBiddingRfq(rfq);
@@ -179,11 +192,19 @@ export const SellerPortal: React.FC = () => {
           {/* Navigation Tabs */}
           <div className="mt-4 flex flex-wrap items-center gap-2 text-xs">
             <button
+              onClick={() => setCurrentView('rfq_builder')}
+              className="px-3 py-1.5 font-bold rounded-xs bg-[#F28C28] text-white hover:bg-[#d9771b] transition-colors"
+            >Create RFQ</button>
+            <button
               onClick={() => setActiveTab('available_rfqs')}
               className={`px-3 py-1.5 font-bold rounded-xs transition-colors ${activeTab === 'available_rfqs' ? 'bg-[#12304A] text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}
             >
               Available RFQs for Quotation ({openRfqs.length})
             </button>
+            <button
+              onClick={() => setActiveTab('my_rfqs')}
+              className={`px-3 py-1.5 font-bold rounded-xs transition-colors ${activeTab === 'my_rfqs' ? 'bg-[#12304A] text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}
+            >My RFQs ({myRfqs.length})</button>
             <button
               onClick={() => setActiveTab('my_offers')}
               className={`px-3 py-1.5 font-bold rounded-xs transition-colors ${activeTab === 'my_offers' ? 'bg-[#12304A] text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}
@@ -299,6 +320,48 @@ export const SellerPortal: React.FC = () => {
           </div>
         )}
 
+        {activeTab === 'my_rfqs' && (
+          <div className="space-y-4">
+            <h2 className="text-base font-bold text-[#12304A]">RFQs submitted by this seller</h2>
+            {myRfqs.length === 0 ? (
+              <div className="bg-white border border-[#E2E8F0] p-8 text-center text-sm text-slate-500">You have not submitted an RFQ yet.</div>
+            ) : myRfqs.map(rfq => {
+              const responses = sellerOffers.filter(offer => offer.rfqId === rfq.id);
+              return <article key={rfq.id} className="bg-white border border-[#E2E8F0] p-4 space-y-3">
+                <div className="flex flex-wrap justify-between gap-2">
+                  <span className="font-mono text-xs font-bold text-[#12304A]">{rfq.id}</span>
+                  <span className="text-[10px] uppercase font-bold text-slate-500">{rfq.status}</span>
+                </div>
+                <p className="text-xs text-slate-600">{rfq.items.map(item => `${item.quantity} ${item.unit} ${item.productName}`).join(', ')}</p>
+                <p className="text-xs text-slate-500">Delivery: {rfq.deliveryLocation} · Required: {rfq.requiredDate}</p>
+                <div className="border-t border-slate-100 pt-3 space-y-2">
+                  <h3 className="text-xs font-bold text-[#12304A]">Buyer responses ({responses.length})</h3>
+                  {responses.length === 0 && <p className="text-xs text-slate-500">No buyer responses yet.</p>}
+                  {responses.map(offer => <div key={offer.id} className="p-3 bg-slate-50 border border-slate-200 space-y-2">
+                    <div className="flex justify-between gap-3 text-xs">
+                      <span className="font-semibold text-slate-800">{offer.sellerCompany} · {offer.sellerName}</span>
+                      <span className="font-bold text-[#12304A]">৳{offer.totalPrice.toLocaleString()}</span>
+                    </div>
+                    <p className="text-[11px] text-slate-500">Delivery: {offer.deliveryTime} · Validity: {offer.offerValidity}</p>
+                    {offer.additionalNotes && <p className="text-xs text-slate-600">{offer.additionalNotes}</p>}
+                    {offer.status === 'counter_offered' && <p className="text-xs text-amber-900">Counter sent: ৳{(offer.counterPrice || 0).toLocaleString()} · Waiting for buyer response.</p>}
+                    {offer.status === 'pending' && <div className="flex flex-wrap gap-2">
+                      <button type="button" onClick={() => selectSellerOffer(rfq.id, offer.id)} className="px-3 py-1.5 bg-emerald-700 text-white text-xs font-semibold rounded-xs">Accept response</button>
+                      <button type="button" onClick={() => rejectSellerOffer(rfq.id, offer.id)} className="px-3 py-1.5 border border-slate-300 text-slate-700 text-xs font-semibold rounded-xs">Decline</button>
+                      <button type="button" onClick={() => { setCounteringOfferId(counteringOfferId === offer.id ? null : offer.id); setCounterTotal(String(offer.totalPrice)); }} className="px-3 py-1.5 border border-amber-300 bg-amber-50 text-amber-900 text-xs font-semibold rounded-xs">Counter</button>
+                    </div>}
+                    {counteringOfferId === offer.id && <form onSubmit={event => { event.preventDefault(); submitCounterOffer(rfq.id, offer.id, Number(counterTotal), counterNotes); setCounteringOfferId(null); }} className="grid grid-cols-1 sm:grid-cols-[1fr_1fr_auto] gap-2">
+                      <input type="number" min="1" step="0.01" required aria-label="Counteroffer amount" value={counterTotal} onChange={event => setCounterTotal(event.target.value)} className="p-2 border border-slate-300 text-xs" />
+                      <input aria-label="Counteroffer notes" value={counterNotes} onChange={event => setCounterNotes(event.target.value)} placeholder="Terms or notes" className="p-2 border border-slate-300 text-xs" />
+                      <button type="submit" className="px-3 py-2 bg-[#12304A] text-white text-xs font-semibold">Send</button>
+                    </form>}
+                  </div>)}
+                </div>
+              </article>;
+            })}
+          </div>
+        )}
+
         {/* TAB 2: MY SUBMITTED OFFERS */}
         {activeTab === 'my_offers' && (
           <div className="space-y-4">
@@ -345,6 +408,19 @@ export const SellerPortal: React.FC = () => {
                       <div><strong>Location:</strong> {offer.availability}</div>
                       <div><strong>Warranty:</strong> {offer.warranty}</div>
                     </div>
+
+                    {offer.status === 'counter_offered' && (
+                      <div className="p-3 bg-amber-50 border border-amber-200 rounded-xs space-y-2">
+                        <div className="text-xs text-amber-950">
+                          <strong>Buyer counteroffer:</strong> ৳{(offer.counterPrice || 0).toLocaleString()}
+                          {offer.counterNotes && <p className="mt-1">{offer.counterNotes}</p>}
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          <button type="button" onClick={() => acceptCounterOffer(offer.id)} className="px-3 py-1.5 bg-emerald-700 text-white text-xs font-semibold rounded-xs">Accept counteroffer</button>
+                          <button type="button" onClick={() => declineCounterOffer(offer.id)} className="px-3 py-1.5 border border-slate-300 text-slate-700 text-xs font-semibold rounded-xs">Decline counteroffer</button>
+                        </div>
+                      </div>
+                    )}
 
                     {offer.status === 'selected' && (
                       <div className="mt-3 p-3 bg-emerald-50 border border-emerald-300 rounded-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">

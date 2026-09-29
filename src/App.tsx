@@ -72,6 +72,18 @@ const WorkspaceGate: React.FC<{ role: UserRole; children: React.ReactNode }> = (
     );
   }
 
+  if (role === 'customer' && currentUser.buyerStatus !== 'approved') {
+    const rejected = currentUser.buyerStatus === 'rejected' || !currentUser.isActive;
+    return (
+      <section className="min-h-[50vh] flex items-center justify-center px-4 py-16">
+        <div className="max-w-md text-center">
+          <h1 className="text-2xl font-bold text-[#12304A]">{rejected ? 'Account not approved' : 'Buyer account pending approval'}</h1>
+          <p className="mt-2 text-sm text-slate-600">{rejected ? 'Contact the site administrator for account assistance.' : 'Your account is registered. Admin approval is required before you can submit RFQs or use the buyer workspace.'}</p>
+        </div>
+      </section>
+    );
+  }
+
   return <>{children}</>;
 };
 

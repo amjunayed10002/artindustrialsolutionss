@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import { supabase, supabaseConfigured } from '../lib/supabase';
 import {
   Product,
@@ -90,6 +90,7 @@ interface AppContextType {
   websiteSettings: WebsiteSettings;
   contactMessages: ContactMessage[];
   sellers: SellerProfile[];
+  managedAccounts: User[];
 
   // Dynamic Product discovery lists
   featuredProducts: Product[];
@@ -116,6 +117,7 @@ interface AppContextType {
 
   // Seller Offer & RFQ workflow
   submitSellerOffer: (offerData: Omit<SellerOffer, 'id' | 'submittedAt' | 'status'>) => void;
+  submitBuyerOffer: (offerData: Omit<SellerOffer, 'id' | 'submittedAt' | 'status'>) => void;
   selectSellerOffer: (rfqId: string, offerId: string) => void;
   rejectSellerOffer: (rfqId: string, offerId: string) => void;
   submitCounterOffer: (rfqId: string, offerId: string, counterPrice: number, counterNotes?: string) => void;
@@ -130,7 +132,7 @@ interface AppContextType {
       estimatedDeliveryDate: string;
       dispatchNotes?: string;
     }
-  ) => void;
+  ) => Promise<void>;
 
   // Admin Management Actions
   addProduct: (product: Omit<Product, 'id' | 'createdAt' | 'views' | 'salesCount'>) => void;
@@ -142,6 +144,8 @@ interface AppContextType {
   deleteCategory: (id: string) => void;
 
   updateSellerStatus: (sellerId: string, status: 'approved' | 'rejected' | 'suspended' | 'pending') => void;
+  loadManagedAccounts: () => Promise<void>;
+  manageAccount: (userId: string, action: 'approve_buyer' | 'reject_buyer' | 'deactivate' | 'reactivate_buyer') => Promise<boolean>;
   updateRfqStatus: (rfqId: string, status: RFQ['status']) => void;
 
   addVendorDocument: (doc: Omit<VendorDocument, 'id' | 'updatedAt'>) => void;
@@ -191,6 +195,7 @@ interface ProfileRecord {
   company_name: string;
   role: User['role'];
   admin_role: User['adminRole'] | null;
+  buyer_status: User['buyerStatus'] | null;
   seller_status: User['sellerStatus'] | null;
   is_active: boolean;
   created_at: string;
@@ -216,6 +221,7 @@ async function fetchUserProfile(userId: string, email: string): Promise<User> {
     companyName: profile.company_name,
     role: profile.role,
     adminRole: profile.admin_role || undefined,
+    buyerStatus: profile.buyer_status || undefined,
     sellerStatus: profile.seller_status || undefined,
     createdAt: profile.created_at,
     isActive: profile.is_active
@@ -291,6 +297,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [authLoading, setAuthLoading] = useState(true);
   const [siteConfigReady, setSiteConfigReady] = useState(false);
   const [adminUsers, setAdminUsers] = useState<User[]>([]);
+  const [managedAccounts, setManagedAccounts] = useState<User[]>([]);
+  const sharedConfigSnapshot = useRef<Record<string, string>>({});
+  const pendingConfigWrites = useRef<Record<string, string>>({});
 
   const [websiteSettings, setWebsiteSettingsState] = useState<WebsiteSettings>(() => getStorage('settings', INITIAL_SETTINGS));
   const [categories, setCategories] = useState<ProductCategory[]>(() => getStorage('categories', INITIAL_CATEGORIES));
@@ -317,6 +326,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setAuthLoading(false);
       return;
     }
+    const client = supabase;
 
     let active = true;
     const applySession = async (session: { user: { id: string; email?: string } } | null) => {
@@ -338,6 +348,23 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         } catch (sellerError) {
           console.error('Unable to load seller profiles', sellerError);
           setSellers([]);
+        }
+
+        try {
+          const [rfqResult, offerResult, orderResult] = await Promise.all([
+            client.from('marketplace_rfqs').select('data'),
+            client.from('marketplace_offers').select('data'),
+            client.from('marketplace_orders').select('data')
+          ]);
+          const workflowError = rfqResult.error || offerResult.error || orderResult.error;
+          if (workflowError) throw workflowError;
+          if (!active) return;
+          setRfqs((rfqResult.data || []).map(record => record.data as unknown as RFQ));
+          setSellerOffers((offerResult.data || []).map(record => record.data as unknown as SellerOffer));
+          setProcurementOrders((orderResult.data || []).map(record => record.data as unknown as ProcurementOrder));
+        } catch (workflowError) {
+          console.error('Unable to load shared marketplace workflows', workflowError);
+          if (active) setToastMessage('Marketplace tables are not ready. Apply the latest Supabase schema to sync RFQs and orders.');
         }
       } catch (error) {
         console.error('Unable to load account profile', error);
@@ -386,6 +413,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
       if (!active) return;
       for (const row of (data || []) as { config_key: string; config_value: unknown }[]) {
+        sharedConfigSnapshot.current[row.config_key] = JSON.stringify(row.config_value);
         switch (row.config_key) {
           case 'website_settings': setWebsiteSettingsState(row.config_value as WebsiteSettings); break;
           case 'categories': setCategories(row.config_value as ProductCategory[]); break;
@@ -404,6 +432,80 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     void loadSiteConfig();
     return () => { active = false; };
   }, []);
+
+  useEffect(() => {
+    if (!supabase) return;
+    const client = supabase;
+    let active = true;
+
+    const syncRfqs = async () => {
+      const { data, error } = await client.from('marketplace_rfqs').select('data');
+      if (!active) return;
+      if (error) { console.error('Unable to refresh shared RFQs', error); return; }
+      setRfqs((data || []).map(record => record.data as unknown as RFQ));
+    };
+    const syncOffers = async () => {
+      const { data, error } = await client.from('marketplace_offers').select('data');
+      if (!active) return;
+      if (error) { console.error('Unable to refresh shared offers', error); return; }
+      setSellerOffers((data || []).map(record => record.data as unknown as SellerOffer));
+    };
+    const syncOrders = async () => {
+      const { data, error } = await client.from('marketplace_orders').select('data');
+      if (!active) return;
+      if (error) { console.error('Unable to refresh shared orders', error); return; }
+      setProcurementOrders((data || []).map(record => record.data as unknown as ProcurementOrder));
+    };
+    const syncSiteConfig = async () => {
+      const { data, error } = await client.from('site_config').select('config_key, config_value');
+      if (!active || error || !data) return;
+      for (const row of data as { config_key: string; config_value: unknown }[]) {
+        sharedConfigSnapshot.current[row.config_key] = JSON.stringify(row.config_value);
+        switch (row.config_key) {
+          case 'website_settings': setWebsiteSettingsState(row.config_value as WebsiteSettings); break;
+          case 'categories': setCategories(row.config_value as ProductCategory[]); break;
+          case 'products': setProducts(row.config_value as Product[]); break;
+          case 'services': setServices(row.config_value as EngineeringService[]); break;
+          case 'industries': setIndustries(row.config_value as IndustryServed[]); break;
+          case 'vendor_documents': setVendorDocuments(row.config_value as VendorDocument[]); break;
+          case 'social_media': setSocialMedia(row.config_value as SocialMediaItem[]); break;
+          case 'homepage_sections': setHomepageSections((row.config_value as HomepageSectionConfig[]).filter(section => section.type !== 'hero' && section.type !== 'quick_actions')); break;
+          case 'promotional_offer': setPromotionalOfferState(row.config_value as PromotionalOfferBanner); break;
+        }
+      }
+    };
+    const syncProfiles = async (changedUserId: string) => {
+      if (currentUser.id && changedUserId === currentUser.id) {
+        try {
+          const profile = await fetchUserProfile(currentUser.id, currentUser.email);
+          if (!active) return;
+          setCurrentUser(profile);
+          setIsAuthenticated(profile.isActive);
+        } catch (error) {
+          console.error('Unable to refresh account permissions', error);
+        }
+      }
+      await Promise.all([loadManagedAccounts(), loadAdminUsers()]);
+      try { setSellers(await fetchSellerProfiles()); } catch (error) { console.error('Unable to refresh seller list', error); }
+    };
+
+    const channel = client.channel('global-site-and-marketplace-updates')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'site_config' }, () => { void syncSiteConfig(); })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'marketplace_rfqs' }, () => { void syncRfqs(); })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'marketplace_offers' }, () => { void syncOffers(); })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'marketplace_orders' }, () => { void syncOrders(); })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, payload => {
+        const profileChange = payload as { new: { id?: string } | null; old: { id?: string } | null };
+        const changedUserId = String(profileChange.new?.id || profileChange.old?.id || '');
+        if (changedUserId) void syncProfiles(changedUserId);
+      })
+      .subscribe();
+
+    return () => {
+      active = false;
+      void client.removeChannel(channel);
+    };
+  }, [currentUser.id, currentUser.email]);
 
   // Sync non-sensitive application preferences and working data to local storage.
   useEffect(() => setStorage('settings', websiteSettings), [websiteSettings]);
@@ -588,8 +690,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const submitRfq = (info: { deliveryLocation: string; requiredDate: string; overallNotes?: string }): string => {
-    if (!isAuthenticated || currentUser.role !== 'customer') {
-      showToast('Sign in with a buyer account to submit a quotation request.');
+    const canSubmitBuyerRfq = currentUser.role === 'customer' && currentUser.buyerStatus === 'approved';
+    const canSubmitSellerRfq = currentUser.role === 'seller' && currentUser.sellerStatus === 'approved';
+    if (!isAuthenticated || (!canSubmitBuyerRfq && !canSubmitSellerRfq)) {
+      showToast('An approved buyer or seller account is required to submit a quotation request.');
       return '';
     }
 
@@ -598,6 +702,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const newRfq: RFQ = {
       id: rfqId,
       customerId: currentUser.id,
+      createdByRole: currentUser.role === 'seller' ? 'seller' : 'customer',
       customerName: currentUser.name,
       customerEmail: currentUser.email,
       customerPhone: currentUser.phone,
@@ -612,28 +717,33 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
 
     setRfqs(prev => [newRfq, ...prev]);
+    void persistMarketplaceRecord('rfq', newRfq);
     setRfqDraftItems([]);
     clearCart();
-    showToast(`Quotation ${rfqId} submitted successfully! Approved sellers are being notified.`);
+    showToast(`Quotation ${rfqId} submitted successfully.`);
     return rfqId;
   };
 
   // Seller Offer Workflow
   const submitSellerOffer = (offerData: Omit<SellerOffer, 'id' | 'submittedAt' | 'status'>) => {
-    if (!isAuthenticated || currentUser.role !== 'seller' || currentUser.sellerStatus !== 'approved' || offerData.sellerId !== currentUser.id) {
-      showToast('An approved seller account is required to submit an offer.');
+    const rfq = rfqs.find(item => item.id === offerData.rfqId);
+    const ownerRole = rfq?.createdByRole || 'customer';
+    if (!isAuthenticated || currentUser.role !== 'seller' || currentUser.sellerStatus !== 'approved' || offerData.sellerId !== currentUser.id || !rfq || rfq.customerId === currentUser.id || ownerRole !== 'customer') {
+      showToast('An approved seller account can submit offers to buyer RFQs only.');
       return;
     }
 
     const newOfferId = `off-${Date.now()}`;
     const newOffer: SellerOffer = {
       ...offerData,
+      bidderRole: 'seller',
       id: newOfferId,
       submittedAt: new Date().toISOString(),
       status: 'pending'
     };
 
     setSellerOffers(prev => [newOffer, ...prev]);
+    void persistMarketplaceRecord('offer', newOffer);
 
     // Update RFQ status to Offers Received
     setRfqs(prev =>
@@ -643,67 +753,118 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     showToast(`Offer of ৳${newOffer.totalPrice.toLocaleString()} submitted for ${offerData.rfqId}`);
   };
 
-  const selectSellerOffer = (rfqId: string, offerId: string) => {
-    const targetRfq = rfqs.find(r => r.id === rfqId);
-    if (!isAuthenticated || currentUser.role !== 'customer' || targetRfq?.customerId !== currentUser.id) {
-      showToast('Only the buyer who submitted this request can select an offer.');
+  const submitBuyerOffer = (offerData: Omit<SellerOffer, 'id' | 'submittedAt' | 'status'>) => {
+    const rfq = rfqs.find(item => item.id === offerData.rfqId);
+    if (!isAuthenticated || currentUser.role !== 'customer' || currentUser.buyerStatus !== 'approved' || offerData.sellerId !== currentUser.id || !rfq || rfq.createdByRole !== 'seller' || rfq.customerId === currentUser.id) {
+      showToast('An approved buyer account can respond to seller RFQs only.');
       return;
     }
 
-    setSellerOffers(prev =>
-      prev.map(o => {
+    const newOffer: SellerOffer = {
+      ...offerData,
+      bidderRole: 'customer',
+      id: `off-${Date.now()}`,
+      submittedAt: new Date().toISOString(),
+      status: 'pending'
+    };
+    setSellerOffers(prev => [newOffer, ...prev]);
+    void persistMarketplaceRecord('offer', newOffer);
+    setRfqs(prev => prev.map(item => item.id === rfq.id ? { ...item, status: 'Offers Received', updatedAt: new Date().toISOString() } : item));
+    showToast(`Response submitted for ${rfq.id}.`);
+  };
+
+  const selectSellerOffer = (rfqId: string, offerId: string) => {
+    const targetRfq = rfqs.find(r => r.id === rfqId);
+    const targetOffer = sellerOffers.find(offer => offer.id === offerId && offer.rfqId === rfqId);
+    const ownerRole = targetRfq?.createdByRole || 'customer';
+    const isApprovedOwner = currentUser.role === 'customer'
+      ? currentUser.buyerStatus === 'approved'
+      : currentUser.role === 'seller' && currentUser.sellerStatus === 'approved';
+    if (!isAuthenticated || !isApprovedOwner || targetRfq?.customerId !== currentUser.id || ownerRole !== currentUser.role || !targetOffer) {
+      showToast('Only the approved account that submitted this request can select a response.');
+      return;
+    }
+
+    const updatedOffers = sellerOffers.map(o => {
         if (o.rfqId === rfqId) {
-          return o.id === offerId ? { ...o, status: 'selected' } : { ...o, status: 'rejected' };
+          return o.id === offerId ? { ...o, status: 'selected' as const } : { ...o, status: 'rejected' as const };
         }
         return o;
-      })
-    );
+      });
+    setSellerOffers(updatedOffers);
+    const selectedOfferForSync = updatedOffers.find(offer => offer.id === offerId);
+    if (selectedOfferForSync) void persistMarketplaceRecord('offer', selectedOfferForSync);
 
-    setRfqs(prev =>
-      prev.map(r =>
-        r.id === rfqId
-          ? { ...r, status: 'Seller Selected', selectedSellerOfferId: offerId, updatedAt: new Date().toISOString() }
-          : r
-      )
-    );
+    const updatedRfq = { ...targetRfq, status: 'Seller Selected' as const, selectedSellerOfferId: offerId, updatedAt: new Date().toISOString() };
+    setRfqs(prev => prev.map(r => r.id === rfqId ? updatedRfq : r));
+    void persistMarketplaceRecord('rfq', updatedRfq);
 
     const selOffer = sellerOffers.find(o => o.id === offerId);
     showToast(`Selected supplier: ${selOffer?.sellerCompany || 'Seller'}. Supplier notified to confirm fulfillment.`);
   };
 
   const rejectSellerOffer = (rfqId: string, offerId: string) => {
+    const targetRfq = rfqs.find(r => r.id === rfqId);
+    const targetOffer = sellerOffers.find(offer => offer.id === offerId && offer.rfqId === rfqId);
+    const ownerRole = targetRfq?.createdByRole || 'customer';
+    const isApprovedOwner = currentUser.role === 'customer'
+      ? currentUser.buyerStatus === 'approved'
+      : currentUser.role === 'seller' && currentUser.sellerStatus === 'approved';
+    if (!isAuthenticated || !isApprovedOwner || targetRfq?.customerId !== currentUser.id || ownerRole !== currentUser.role || !targetOffer) {
+      showToast('Only the approved RFQ owner can decline a response.');
+      return;
+    }
     setSellerOffers(prev =>
       prev.map(o => (o.id === offerId ? { ...o, status: 'rejected' } : o))
     );
+    void persistMarketplaceRecord('offer', { ...targetOffer, status: 'rejected' });
     showToast('Supplier offer marked as rejected.');
   };
 
   const submitCounterOffer = (rfqId: string, offerId: string, counterPrice: number, counterNotes?: string) => {
+    const targetRfq = rfqs.find(r => r.id === rfqId);
+    const targetOffer = sellerOffers.find(offer => offer.id === offerId && offer.rfqId === rfqId);
+    const ownerRole = targetRfq?.createdByRole || 'customer';
+    const isApprovedOwner = currentUser.role === 'customer'
+      ? currentUser.buyerStatus === 'approved'
+      : currentUser.role === 'seller' && currentUser.sellerStatus === 'approved';
+    if (!isAuthenticated || !isApprovedOwner || targetRfq?.customerId !== currentUser.id || ownerRole !== currentUser.role || !targetOffer || targetOffer.status !== 'pending' || counterPrice <= 0) {
+      showToast('Only the approved RFQ owner can send a valid counteroffer.');
+      return;
+    }
+    const updatedOffer = {
+      ...targetOffer,
+      status: 'counter_offered' as const,
+      counterPrice,
+      counterNotes: counterNotes || 'Buyer proposed a counteroffer.',
+      counterAt: new Date().toISOString()
+    };
     setSellerOffers(prev =>
       prev.map(o => {
         if (o.id === offerId) {
-          return {
-            ...o,
-            status: 'counter_offered',
-            counterPrice,
-            counterNotes: counterNotes || 'Client proposed counter offer price.',
-            counterAt: new Date().toISOString()
-          };
+          return updatedOffer;
         }
         return o;
       })
     );
+    void persistMarketplaceRecord('offer', updatedOffer);
     showToast(`Counter offer of ৳${counterPrice.toLocaleString()} transmitted to bidder!`);
   };
 
   const acceptCounterOffer = (offerId: string) => {
     const offer = sellerOffers.find(o => o.id === offerId);
-    if (!offer) return;
+    const bidderRole = offer?.bidderRole || 'seller';
+    const bidderApproved = bidderRole === 'seller' ? currentUser.sellerStatus === 'approved' : currentUser.buyerStatus === 'approved';
+    if (!offer || offer.sellerId !== currentUser.id || offer.status !== 'counter_offered' || !isAuthenticated || currentUser.role !== bidderRole || !bidderApproved) {
+      showToast('Only the account that submitted this response can accept its counteroffer.');
+      return;
+    }
     const finalPrice = offer.counterPrice || offer.totalPrice;
 
     setSellerOffers(prev =>
       prev.map(o => (o.id === offerId ? { ...o, totalPrice: finalPrice, status: 'selected' } : o))
     );
+    void persistMarketplaceRecord('offer', { ...offer, totalPrice: finalPrice, status: 'selected' });
     setRfqs(prev =>
       prev.map(r => (r.id === offer.rfqId ? { ...r, status: 'Seller Selected', selectedSellerOfferId: offerId } : r))
     );
@@ -711,9 +872,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const declineCounterOffer = (offerId: string) => {
+    const offer = sellerOffers.find(o => o.id === offerId);
+    const bidderRole = offer?.bidderRole || 'seller';
+    const bidderApproved = bidderRole === 'seller' ? currentUser.sellerStatus === 'approved' : currentUser.buyerStatus === 'approved';
+    if (!offer || offer.sellerId !== currentUser.id || offer.status !== 'counter_offered' || !isAuthenticated || currentUser.role !== bidderRole || !bidderApproved) {
+      showToast('Only the account that submitted this response can decline its counteroffer.');
+      return;
+    }
     setSellerOffers(prev =>
       prev.map(o => (o.id === offerId ? { ...o, status: 'pending' } : o))
     );
+    void persistMarketplaceRecord('offer', { ...offer, status: 'pending' });
     showToast('Counter offer declined. Original quote remains active.');
   };
 
@@ -843,19 +1012,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         showToast('Your account was created, but its profile could not be loaded. Contact the site administrator.');
         return false;
       }
+    } else if (data.role === 'seller') {
+      showToast('Seller account created. Disable email confirmation in Supabase Auth settings for immediate sign-in.');
     } else {
-      showToast('Account created. Check your email to confirm your address before signing in.');
+      showToast('Buyer account created. Confirm your email if prompted; an administrator must approve the account before workspace access.');
     }
 
-    if (data.role === 'seller') {
-      showToast('Seller application received. Your account will be available after review.');
-    } else if (result.session) {
-      showToast('Buyer account created successfully.');
+    if (result.session && data.role === 'seller') {
+      showToast('Seller account is active. You can submit offers and RFQs now.');
+    } else if (result.session && data.role === 'buyer') {
+      showToast('Buyer application submitted. Workspace access starts after admin approval.');
     }
     return true;
   };
 
-  const confirmSellerOrder = (
+  const confirmSellerOrder = async (
     offerId: string,
     dispatchDetails?: {
       courierName: string;
@@ -863,7 +1034,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       estimatedDeliveryDate: string;
       dispatchNotes?: string;
     }
-  ) => {
+  ): Promise<void> => {
     const offer = sellerOffers.find(o => o.id === offerId);
     const targetRfq = offer ? rfqs.find(r => r.id === offer.rfqId) : undefined;
     if (!offer || !targetRfq) return;
@@ -872,17 +1043,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return;
     }
 
-    setSellerOffers(prev =>
-      prev.map(o => (o.id === offerId ? { ...o, status: 'confirmed', confirmedAt: new Date().toISOString() } : o))
-    );
+    const confirmedAt = new Date().toISOString();
+    const confirmedOffer = { ...offer, status: 'confirmed' as const, confirmedAt };
 
-    setRfqs(prev =>
-      prev.map(r =>
-        r.id === offer.rfqId
-          ? { ...r, status: 'Seller Confirmed', updatedAt: new Date().toISOString() }
-          : r
-      )
-    );
+    const updatedRfq = { ...targetRfq, status: 'Seller Confirmed' as const, updatedAt: confirmedAt };
 
     // Create Procurement Order with Dispatch tracking procedure
     const newPo: ProcurementOrder = {
@@ -907,6 +1071,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       createdAt: new Date().toISOString()
     };
 
+    if (!await persistMarketplaceRecord('offer', confirmedOffer)) return;
+    if (!await persistMarketplaceRecord('rfq', updatedRfq)) return;
+    if (!await persistMarketplaceRecord('order', newPo)) return;
+
+    setSellerOffers(prev => prev.map(o => (o.id === offerId ? confirmedOffer : o)));
+    setRfqs(prev => prev.map(r => r.id === offer.rfqId ? updatedRfq : r));
     setProcurementOrders(prev => [newPo, ...prev]);
     showToast(`Order Confirmed & Dispatched! Tracking: ${newPo.trackingNumber} (${newPo.courierName})`);
   };
@@ -935,7 +1105,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         return (
           permission === 'sellers.view' ||
           permission === 'sellers.approve' ||
-          permission === 'sellers.suspend'
+          permission === 'sellers.suspend' ||
+          permission === 'customers.manage'
         );
       case 'content_manager':
         return (
@@ -950,17 +1121,39 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
+  const persistMarketplaceRecord = async (type: 'rfq' | 'offer' | 'order', data: RFQ | SellerOffer | ProcurementOrder): Promise<boolean> => {
+    if (!supabase || !isAuthenticated) return false;
+    const { error } = await supabase.rpc('save_marketplace_record', {
+      p_type: type,
+      p_data: data
+    });
+    if (error) {
+      console.error(`Unable to save marketplace ${type}`, error);
+      showToast(`${type.toUpperCase()} could not be synced. Check account permissions and the latest Supabase schema.`);
+      return false;
+    }
+    return true;
+  };
+
   const saveSharedConfig = async (key: string, value: unknown, permission: PermissionKey) => {
     if (!siteConfigReady || !isAuthenticated || !supabase || !hasPermission(permission)) return;
+
+    const serialized = JSON.stringify(value);
+    if (sharedConfigSnapshot.current[key] === serialized || pendingConfigWrites.current[key] === serialized) return;
+    pendingConfigWrites.current[key] = serialized;
 
     const { error } = await supabase.rpc('save_site_config', {
       p_key: key,
       p_value: value
     });
     if (error) {
+      if (pendingConfigWrites.current[key] === serialized) delete pendingConfigWrites.current[key];
       console.error(`Unable to save shared ${key}`, error);
       showToast(`Could not save ${key.replaceAll('_', ' ')} globally. Check the Supabase schema and permissions.`);
+      return;
     }
+    sharedConfigSnapshot.current[key] = serialized;
+    if (pendingConfigWrites.current[key] === serialized) delete pendingConfigWrites.current[key];
   };
 
   useEffect(() => { void saveSharedConfig('website_settings', websiteSettings, 'settings.manage'); }, [websiteSettings, siteConfigReady, isAuthenticated, currentUser.id]);
@@ -995,10 +1188,64 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       companyName: profile.company_name,
       role: profile.role,
       adminRole: profile.admin_role || undefined,
+      buyerStatus: profile.buyer_status || undefined,
       sellerStatus: profile.seller_status || undefined,
       createdAt: profile.created_at,
       isActive: profile.is_active
     })));
+  };
+
+  const loadManagedAccounts = async (): Promise<void> => {
+    if (!supabase || !hasPermission('customers.manage')) return;
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('*')
+      .in('role', ['customer', 'seller'])
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.error('Unable to load buyer and seller accounts', error);
+      showToast('Could not load buyer and seller accounts.');
+      return;
+    }
+
+    setManagedAccounts(((data || []) as unknown as ProfileRecord[]).map(profile => ({
+      id: profile.id,
+      name: profile.full_name,
+      email: profile.email || '',
+      phone: profile.phone,
+      companyName: profile.company_name,
+      role: profile.role,
+      adminRole: profile.admin_role || undefined,
+      buyerStatus: profile.buyer_status || undefined,
+      sellerStatus: profile.seller_status || undefined,
+      createdAt: profile.created_at,
+      isActive: profile.is_active
+    })));
+  };
+
+  const manageAccount = async (
+    userId: string,
+    action: 'approve_buyer' | 'reject_buyer' | 'deactivate' | 'reactivate_buyer'
+  ): Promise<boolean> => {
+    if (!supabase || !hasPermission('customers.manage')) {
+      showToast('Seller manager or super administrator access is required.');
+      return false;
+    }
+
+    const { error } = await supabase.rpc('admin_manage_account', {
+      p_user_id: userId,
+      p_action: action
+    });
+    if (error) {
+      console.error('Unable to manage account', error);
+      showToast(error.message);
+      return false;
+    }
+
+    await loadManagedAccounts();
+    showToast(action === 'approve_buyer' ? 'Buyer account approved.' : action === 'reject_buyer' ? 'Buyer application rejected.' : action === 'reactivate_buyer' ? 'Buyer account reactivated.' : 'Account deactivated.');
+    return true;
   };
 
   const manageAdminRole = async (email: string, role: AdminRoleType | 'none'): Promise<boolean> => {
@@ -1120,7 +1367,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       showToast('Error: Unauthorized to modify RFQ status.');
       return;
     }
-    setRfqs(prev => prev.map(r => (r.id === rfqId ? { ...r, status, updatedAt: new Date().toISOString() } : r)));
+    const rfq = rfqs.find(item => item.id === rfqId);
+    if (!rfq) return;
+    const updatedRfq = { ...rfq, status, updatedAt: new Date().toISOString() };
+    setRfqs(prev => prev.map(r => (r.id === rfqId ? updatedRfq : r)));
+    void persistMarketplaceRecord('rfq', updatedRfq);
     showToast(`RFQ ${rfqId} status changed to ${status}`);
   };
 
@@ -1374,6 +1625,9 @@ Contact: info@artindustrialsolutions.com | Tel: +880 2 988 7412
         websiteSettings,
         contactMessages,
         sellers,
+        managedAccounts,
+        loadManagedAccounts,
+        manageAccount,
         promotionalOffer,
         updatePromotionalOffer,
 
@@ -1398,6 +1652,7 @@ Contact: info@artindustrialsolutions.com | Tel: +880 2 988 7412
         submitRfq,
 
         submitSellerOffer,
+        submitBuyerOffer,
         selectSellerOffer,
         rejectSellerOffer,
         submitCounterOffer,

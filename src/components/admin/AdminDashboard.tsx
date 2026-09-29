@@ -64,6 +64,9 @@ export const AdminDashboard: React.FC = () => {
     updateCategory,
     deleteCategory,
     updateSellerStatus,
+    managedAccounts,
+    loadManagedAccounts,
+    manageAccount,
     updateRfqStatus,
     addVendorDocument,
     updateVendorDocument,
@@ -92,6 +95,7 @@ export const AdminDashboard: React.FC = () => {
 
   useEffect(() => {
     if (activeTab === 'admins') void loadAdminUsers();
+    if (activeTab === 'sellers' && hasPermission('customers.manage')) void loadManagedAccounts();
   }, [activeTab]);
 
   const handleAdminRoleSubmit = async (event: React.FormEvent) => {
@@ -656,6 +660,7 @@ export const AdminDashboard: React.FC = () => {
                           <span className="font-mono text-xs font-bold bg-[#12304A] text-white px-2 py-0.5 rounded-xs">
                             {rfq.id}
                           </span>
+                          <span className="text-[10px] font-bold uppercase text-slate-500">{rfq.createdByRole === 'seller' ? 'Seller RFQ' : 'Buyer RFQ'}</span>
                           <span className="text-xs font-bold text-[#1E5A85]">Client: {rfq.companyName}</span>
                           <span className="text-slate-400 text-xs">({rfq.customerName})</span>
                         </div>
@@ -726,11 +731,43 @@ export const AdminDashboard: React.FC = () => {
         {activeTab === 'sellers' && (
           <div className="space-y-4">
             <div>
-              <h2 className="text-base font-bold text-[#12304A]">Seller Accounts & Approval Workflow</h2>
+              <h2 className="text-base font-bold text-[#12304A]">Buyer & Seller Accounts</h2>
               <p className="text-xs text-slate-500">
-                Workflow: Pending → Approved / Rejected / Suspended. Only approved sellers can submit valid quotations.
+                Sellers are active after signup. Buyer accounts require approval before using the buyer workspace.
               </p>
             </div>
+
+            {hasPermission('customers.manage') && <section className="bg-white border border-[#E2E8F0] p-4 space-y-3">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <h3 className="font-bold text-sm text-[#12304A]">Buyer accounts</h3>
+                  <p className="text-xs text-slate-500">Approve buyer access or deactivate an account.</p>
+                </div>
+                <span className="text-xs text-slate-500">{managedAccounts.filter(account => account.role === 'customer').length} accounts</span>
+              </div>
+              <div className="divide-y divide-slate-100">
+                {managedAccounts.filter(account => account.role === 'customer').map(account => (
+                  <div key={account.id} className="py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold text-slate-800 truncate">{account.companyName || account.name}</p>
+                      <p className="text-xs text-slate-500 truncate">{account.name} · {account.email}</p>
+                      <span className={`inline-flex mt-1 px-2 py-0.5 text-[10px] font-bold uppercase rounded-xs ${account.buyerStatus === 'approved' && account.isActive ? 'bg-emerald-100 text-emerald-800' : account.buyerStatus === 'pending' ? 'bg-amber-100 text-amber-900' : 'bg-rose-100 text-rose-800'}`}>
+                        {account.isActive ? account.buyerStatus || 'pending' : 'deactivated'}
+                      </span>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2 shrink-0">
+                      {account.buyerStatus === 'pending' && <>
+                        <button type="button" disabled={adminActionBusy} onClick={async () => { setAdminActionBusy(true); await manageAccount(account.id, 'approve_buyer'); setAdminActionBusy(false); }} className="px-3 py-1.5 bg-emerald-700 text-white text-xs font-semibold rounded-xs disabled:opacity-50">Approve buyer</button>
+                        <button type="button" disabled={adminActionBusy} onClick={async () => { setAdminActionBusy(true); await manageAccount(account.id, 'reject_buyer'); setAdminActionBusy(false); }} className="px-3 py-1.5 bg-slate-200 text-slate-800 text-xs font-semibold rounded-xs disabled:opacity-50">Reject</button>
+                      </>}
+                      {account.isActive && <button type="button" disabled={adminActionBusy} onClick={async () => { setAdminActionBusy(true); await manageAccount(account.id, 'deactivate'); setAdminActionBusy(false); }} className="px-3 py-1.5 border border-rose-200 text-rose-700 text-xs font-semibold rounded-xs disabled:opacity-50">Remove</button>}
+                      {!account.isActive && <button type="button" disabled={adminActionBusy} onClick={async () => { setAdminActionBusy(true); await manageAccount(account.id, 'reactivate_buyer'); setAdminActionBusy(false); }} className="px-3 py-1.5 bg-emerald-700 text-white text-xs font-semibold rounded-xs disabled:opacity-50">Approve / reactivate</button>}
+                    </div>
+                  </div>
+                ))}
+                {managedAccounts.every(account => account.role !== 'customer') && <p className="py-4 text-center text-xs text-slate-500">No buyer accounts found.</p>}
+              </div>
+            </section>}
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {sellers.map(s => (
@@ -790,6 +827,11 @@ export const AdminDashboard: React.FC = () => {
                           Re-Activate
                         </button>
                       )}
+                      <button
+                        onClick={() => void manageAccount(s.userId, 'deactivate')}
+                        disabled={!hasPermission('customers.manage')}
+                        className="px-3 py-1.5 border border-rose-200 text-rose-700 text-xs font-semibold rounded-xs disabled:opacity-50"
+                      >Deactivate</button>
                     </div>
                   )}
                 </div>
